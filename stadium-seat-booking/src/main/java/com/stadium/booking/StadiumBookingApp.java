@@ -14,6 +14,8 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -144,6 +146,19 @@ public final class StadiumBookingApp extends JFrame {
         };
         bookingTable = new JTable(bookingTableModel);
         bookingTable.getSelectionModel().addListSelectionListener(event -> updateCancelButton());
+        bookingTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event)) {
+                    return;
+                }
+                int row = bookingTable.rowAtPoint(event.getPoint());
+                if (row >= 0) {
+                    bookingTable.setRowSelectionInterval(row, row);
+                    showBookingDetails(row);
+                }
+            }
+        });
 
         configureWindow();
         installSearchListeners();
@@ -1244,7 +1259,7 @@ public final class StadiumBookingApp extends JFrame {
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 15f));
         heading.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Select up to 6 available seats");
+        JLabel hint = new JLabel("No limit per person • up to 6 seats per reservation");
         hint.setForeground(MUTED);
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 11f));
         heading.add(hint, BorderLayout.EAST);
@@ -1577,6 +1592,13 @@ public final class StadiumBookingApp extends JFrame {
         tableCard.setLayout(new BorderLayout(0, 10));
         tableCard.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
+        JPanel tableHeader = new JPanel(new BorderLayout());
+        tableHeader.setOpaque(false);
+        JLabel tableHint = new JLabel("Click any booking row to view the complete reservation and customer details.");
+        tableHint.setForeground(MUTED);
+        tableHint.setFont(tableHint.getFont().deriveFont(Font.PLAIN, 10f));
+        tableHeader.add(tableHint, BorderLayout.WEST);
+        tableCard.add(tableHeader, BorderLayout.NORTH);
         configureBookingTable();
         JScrollPane tableScroll = new JScrollPane(bookingTable);
         tableScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -1669,6 +1691,111 @@ public final class StadiumBookingApp extends JFrame {
                     + booking.getEventStartTime().format(TIME_FORMATTER);
         }
         return event == null ? "—" : event.getWhenLabel();
+    }
+
+    private void showBookingDetails(int row) {
+        if (row < 0 || row >= bookingTableModel.getRowCount()) {
+            return;
+        }
+        String reference = String.valueOf(bookingTableModel.getValueAt(row, 0));
+        Booking booking = null;
+        for (Booking candidate : bookingService.getBookings()) {
+            if (candidate.getReference().equals(reference)) {
+                booking = candidate;
+                break;
+            }
+        }
+        if (booking == null) {
+            return;
+        }
+
+        Stadium stadium = StadiumData.getStadium(booking.getStadiumId());
+        StadiumEvent event = StadiumData.getEvent(booking.getEventId());
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(new EmptyBorder(8, 10, 8, 10));
+
+        JPanel header = new JPanel(new BorderLayout(10, 0));
+        header.setOpaque(false);
+        JLabel title = new JLabel("Booking " + booking.getReference());
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
+        header.add(title, BorderLayout.WEST);
+        JLabel status = new JLabel(booking.getStatus().name());
+        status.setForeground(booking.isConfirmed() ? SUCCESS_DARK : CANCELLED);
+        status.setFont(status.getFont().deriveFont(Font.BOLD, 11f));
+        header.add(status, BorderLayout.EAST);
+        content.add(header);
+        content.add(Box.createVerticalStrut(6));
+
+        addDetailSection(content, "BOOKING");
+        addDetailRow(content, "Reference", booking.getReference());
+        addDetailRow(content, "Status", booking.getStatus().name());
+        addDetailRow(content, "Created", CREATED_FORMATTER.format(booking.getCreatedAt()));
+
+        addDetailSection(content, "STADIUM");
+        addDetailRow(content, "Venue", stadium == null ? "Legacy venue" : stadium.getName());
+        addDetailRow(content, "Location", stadium == null ? "—" : stadium.getLocation());
+        addDetailRow(content, "Address", stadium == null ? "—" : stadium.getAddress());
+        addDetailRow(content, "Capacity", stadium == null ? "—"
+                : formatCapacity(stadium.getSeatCount()) + " seats");
+
+        addDetailSection(content, "EVENT");
+        addDetailRow(content, "Event", event == null ? booking.getEvent() : event.getHeadline());
+        addDetailRow(content, "Type", event == null ? "—" : event.getType().getLabel());
+        addDetailRow(content, "Details", event == null ? "—" : event.getEventDetails());
+        addDetailRow(content, "Date and time", bookingWhenLabel(booking, event));
+        addDetailRow(content, "Doors", event == null ? "—" : event.getDoorsLabel());
+        addDetailRow(content, "Booking deadline", event == null ? "—"
+                : event.getBookingDeadlineLabel());
+
+        addDetailSection(content, "BOOKED BY");
+        addDetailRow(content, "Full name", booking.getCustomerName());
+        addDetailRow(content, "Email", booking.getEmail());
+        addDetailRow(content, "Phone", booking.getPhone());
+
+        addDetailSection(content, "SEATS AND PAYMENT");
+        addDetailRow(content, "Booked seats", booking.getSeatDisplay());
+        addDetailRow(content, "Seat count", String.valueOf(booking.getSeats().size()));
+        double seatSubtotal = Math.max(0.0, booking.getTotal() - BookingService.BOOKING_FEE);
+        addDetailRow(content, "Seat subtotal", currency(seatSubtotal));
+        addDetailRow(content, "Booking fee", currency(BookingService.BOOKING_FEE));
+        addDetailRow(content, "Total charged", currency(booking.getTotal()));
+
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getViewport().setBackground(WHITE);
+        scroll.setPreferredSize(new Dimension(650, 620));
+        JOptionPane.showMessageDialog(this, scroll, "Complete booking details",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void addDetailSection(JPanel parent, String title) {
+        JLabel section = new JLabel(title);
+        section.setForeground(BLUE_DARK);
+        section.setFont(section.getFont().deriveFont(Font.BOLD, 10f));
+        section.setAlignmentX(Component.LEFT_ALIGNMENT);
+        section.setBorder(new EmptyBorder(10, 0, 4, 0));
+        parent.add(section);
+    }
+
+    private void addDetailRow(JPanel parent, String label, String value) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        JLabel key = new JLabel(label);
+        key.setForeground(MUTED);
+        key.setFont(key.getFont().deriveFont(Font.BOLD, 10f));
+        key.setPreferredSize(new Dimension(145, 25));
+        JLabel content = new JLabel("<html><div style='width:330px'>"
+                + htmlText(value == null ? "—" : value) + "</div></html>");
+        content.setForeground(TEXT);
+        content.setFont(content.getFont().deriveFont(Font.PLAIN, 11f));
+        row.add(key, BorderLayout.WEST);
+        row.add(content, BorderLayout.CENTER);
+        parent.add(row);
     }
 
     private void updateCancelButton() {

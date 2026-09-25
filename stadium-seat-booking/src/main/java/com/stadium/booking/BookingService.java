@@ -486,7 +486,8 @@ public class BookingService {
             selectedKeys.add(seat.getKey());
         }
         if (selectedKeys.size() > MAX_SEATS_PER_BOOKING) {
-            throw new IllegalArgumentException("You can book up to " + MAX_SEATS_PER_BOOKING + " seats");
+            throw new IllegalArgumentException("A reservation can contain up to "
+                    + MAX_SEATS_PER_BOOKING + " seats");
         }
         for (SeatKey key : selectedKeys) {
             if (isBooked(key)) {
@@ -494,6 +495,8 @@ public class BookingService {
             }
         }
 
+        // Customer identity is stored for the receipt and history only. There is intentionally
+        // no limit on how many reservations one person may create.
         List<SeatKey> keys = new ArrayList<>(selectedKeys);
         keys.sort(SeatKey::compareTo);
         double total = getTotalCharge(keys.stream()

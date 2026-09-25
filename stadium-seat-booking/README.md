@@ -29,9 +29,10 @@ A professional desktop stadium directory and seat-booking application built with
 - Interactive seat map for sections A, B, C and D
 - Scalable map rendering for stadiums with 20,000+ seats
 - Tapping a seat shows its exact seat number, status and price
-- Maximum of six seats per booking
+- No limit on the number of bookings per person; each reservation can contain up to six seats
 - Booking confirmation with a unique reference
 - Searchable booking history
+- Click any booking row to open complete booking and customer details
 - Booking cancellation
 - Local persistence using `stadium-bookings.dat`
 - No external libraries or database required
