@@ -35,8 +35,9 @@ A professional desktop stadium directory and seat-booking application built with
 - Click any booking row to open complete booking and customer details
 - Back buttons in the main header and opened dialogs for returning to the previous window
 - Booking cancellation
-- Local persistence using `stadium-bookings.dat`
-- No external libraries or database required
+- Persistent H2 database for bookings and customer details
+- Bookings section reads complete records from the database
+- No external database server required; the embedded database is bundled in `lib/`
 
 ## Included sample data
 
@@ -58,6 +59,7 @@ A professional desktop stadium directory and seat-booking application built with
 
 - Java Development Kit (JDK) 17 or newer
 - A desktop environment with Java Swing support
+- The bundled H2 JDBC driver in `lib/` (included with the project)
 
 ## Run on Linux/macOS
 
@@ -74,8 +76,8 @@ From the project directory:
 
 ```bash
 mkdir -p build/classes
-javac -d build/classes $(find src/main/java -name '*.java' -print)
-java -cp build/classes com.stadium.booking.StadiumBookingApp
+javac -cp 'lib/*' -d build/classes $(find src/main/java -name '*.java' -print)
+java -cp 'build/classes:lib/*' com.stadium.booking.StadiumBookingApp
 ```
 
 ## How to use it
@@ -90,4 +92,4 @@ java -cp build/classes com.stadium.booking.StadiumBookingApp
 8. Review the booked seat numbers in the confirmation message.
 9. Open **My bookings** to search, review or cancel a reservation.
 
-Booking data is stored in the project working directory as `stadium-bookings.dat`. Delete that file to reset the demo inventory.
+Bookings are stored in the embedded H2 database `stadium-bookings.mv.db` in the project working directory. Delete that file to reset the database. Older `stadium-bookings.dat` files are migrated automatically when found.

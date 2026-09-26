@@ -1,3 +1,6 @@
 build/
 *.class
 stadium-bookings.dat
+*.mv.db
+*.trace.db
+*.lock.db
