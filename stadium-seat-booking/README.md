@@ -33,6 +33,7 @@ A professional desktop stadium directory and seat-booking application built with
 - Booking confirmation with a unique reference
 - Searchable booking history
 - Click any booking row to open complete booking and customer details
+- Back buttons in the main header and opened dialogs for returning to the previous window
 - Booking cancellation
 - Local persistence using `stadium-bookings.dat`
 - No external libraries or database required
