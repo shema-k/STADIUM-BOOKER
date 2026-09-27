@@ -35,6 +35,14 @@ A professional desktop stadium directory and seat-booking application built with
 - Event-specific seat pricing and availability
 - Price outline showing every selected seat, row tier, subtotal, booking fee and total due
 - Explicit **Confirm booked seats** button
+- **Save these seats** keeps a chosen set of seats so you can come back and book them later,
+  without having to buy them to remember the choice
+- Saved selections are kept in the database, so they survive closing the application
+- A saved selection is not a booking and does not hold the seats, and the screen says so
+- A saved selection that has gone stale, because the event was cancelled or somebody bought
+  one of its seats, says which seat went and refuses to resume
+- **Saved seats** in the header lists everything saved, with **Resume and book** and
+  **Discard** for each
 - Live vacancy percentage and remaining-seat count
 - Booking deadline shown for every event
 - Live countdown showing days, months, hours or minutes remaining
@@ -108,7 +116,7 @@ A professional desktop stadium directory and seat-booking application built with
 ./run-tests.sh
 ```
 
-One hundred and sixty-one tests covering the venue and event data, pricing and booking rules, database
+One hundred and seventy-nine tests covering the venue and event data, pricing and booking rules, database
 persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
 the three languages, the occupancy report, keyboard seat selection, staff accounts and
 requiring a database password, the stadium detail pages and pictures, and dark mode. The

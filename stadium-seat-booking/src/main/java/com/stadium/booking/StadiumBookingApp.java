@@ -166,6 +166,7 @@ public final class StadiumBookingApp extends JFrame {
     private final JButton seatLedgerNavButton = new FeedbackButton(Messages.get("nav.bookedSeats"));
     private final JButton occupancyNavButton = new FeedbackButton(Messages.get("nav.occupancy"));
     private final JButton staffNavButton = new FeedbackButton(Messages.get("nav.staff"));
+    private final JButton savedNavButton = new FeedbackButton(Messages.get("nav.saved"));
 
     private Stadium selectedStadium;
     private StadiumEvent selectedEvent;
@@ -200,6 +201,7 @@ public final class StadiumBookingApp extends JFrame {
     private final String sessionOwner = UUID.randomUUID().toString();
     private JLabel holdCountdownValue;
     private String ledgerReturnScreen = "directory";
+    private String eventReturnScreen = "stadium";
     private final Timer directorySearchTimer = new Timer(140, event -> {
         if ("directory".equals(currentScreen)) {
             refreshDirectoryContent();
@@ -364,7 +366,10 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private JPanel buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
+        // A two column grid rather than west/east regions: the title then takes
+        // whatever space is left instead of being overlapped by the navigation
+        // once there are enough buttons to fill the bar.
+        JPanel header = new JPanel(new GridBagLayout());
         headerPanel = header;
         header.setBackground(NAVY);
         header.setBorder(BorderFactory.createCompoundBorder(
@@ -422,12 +427,14 @@ public final class StadiumBookingApp extends JFrame {
         styleHeaderButton(seatLedgerNavButton);
         styleHeaderButton(occupancyNavButton);
         styleHeaderButton(staffNavButton);
+        styleHeaderButton(savedNavButton);
         backNavButton.addActionListener(event -> goBack());
         stadiumNavButton.addActionListener(event -> showStadiumDirectory());
         bookingsNavButton.addActionListener(event -> showBookings());
         seatLedgerNavButton.addActionListener(event -> showSeatLedger());
         occupancyNavButton.addActionListener(event -> showOccupancyReport());
         staffNavButton.addActionListener(event -> promptForStaffAction());
+        savedNavButton.addActionListener(event -> showSavedSeats());
         describe(backNavButton, "Back", "Return to the previous screen");
         describe(stadiumNavButton, "Venues", "Show every stadium and concert venue");
         describe(bookingsNavButton, "My bookings", "Sign in and review your reservations");
@@ -435,6 +442,8 @@ public final class StadiumBookingApp extends JFrame {
                 "Sign in and see which seats are already taken at each venue and event");
         describe(occupancyNavButton, "Occupancy",
                 "Sign in and see how full each venue and section is");
+        describe(savedNavButton, "Saved seats",
+                "Seats you chose earlier and can come back to book later");
         describe(staffNavButton, "Staff",
                 "Sign in, change your PIN, or manage staff accounts");
         navigation.add(backNavButton);
@@ -442,9 +451,15 @@ public final class StadiumBookingApp extends JFrame {
         navigation.add(bookingsNavButton);
         navigation.add(seatLedgerNavButton);
         navigation.add(occupancyNavButton);
+        navigation.add(savedNavButton);
         navigation.add(staffNavButton);
 
-        header.add(titleBlock, BorderLayout.WEST);
+        GridBagConstraints headerConstraints = new GridBagConstraints();
+        headerConstraints.gridx = 0;
+        headerConstraints.weightx = 1;
+        headerConstraints.fill = GridBagConstraints.HORIZONTAL;
+        headerConstraints.anchor = GridBagConstraints.LINE_START;
+        header.add(titleBlock, headerConstraints);
         staffBadge = new JLabel("Not signed in");
         staffBadge.setForeground(new Color(191, 219, 254));
         staffBadge.setFont(staffBadge.getFont().deriveFont(Font.PLAIN, 10f));
@@ -452,7 +467,13 @@ public final class StadiumBookingApp extends JFrame {
         badgeBox.setOpaque(false);
         badgeBox.add(navigation, BorderLayout.CENTER);
         badgeBox.add(staffBadge, BorderLayout.SOUTH);
-        header.add(badgeBox, BorderLayout.EAST);
+        // No forced size: the navigation and the signed-in line set their own
+        // height, and imposing one cut the buttons in half.
+        headerConstraints.gridx = 1;
+        headerConstraints.weightx = 0;
+        headerConstraints.fill = GridBagConstraints.NONE;
+        headerConstraints.insets = new Insets(0, 16, 0, 0);
+        header.add(badgeBox, headerConstraints);
         return header;
     }
 
@@ -506,6 +527,7 @@ public final class StadiumBookingApp extends JFrame {
         }
         occupancyNavButton.setText(text("nav.occupancy"));
         staffNavButton.setText(text("nav.staff"));
+        savedNavButton.setText(text("nav.saved"));
         updateStaffBadge();
         updateDarkModeButton();
         seatMapPanel.retranslate();
@@ -536,9 +558,21 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private void setHeader(String title, String subtitle) {
-        headerTitle.setText(title);
-        headerSubtitle.setText(subtitle);
+        headerTitle.setText(clipHeaderTitle(title));
+        headerSubtitle.setText(clipHeaderTitle(subtitle));
         backNavButton.setEnabled(!"directory".equals(currentScreen));
+    }
+
+    /**
+     * Keeps a long venue or event name from running under the navigation. The bar
+     * holds nine buttons, so the title has a fixed ceiling rather than whatever
+     * width the text happens to want.
+     */
+    private String clipHeaderTitle(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() <= 52 ? text : text.substring(0, 50).trim() + "\u2026";
     }
 
     private static final String BACK_LABEL = "← Back";
@@ -564,18 +598,44 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private void goBack() {
-        if ("booking".equals(currentScreen) && selectedStadium != null) {
-            openStadium(selectedStadium);
-        } else if ("seats".equals(currentScreen)) {
-            if ("booking".equals(ledgerReturnScreen) && selectedEvent != null) {
-                openEvent(selectedEvent);
-            } else {
+        switch (currentScreen == null ? "" : currentScreen) {
+            case "booking":
+                if (selectedStadium != null) {
+                    openStadium(selectedStadium);
+                } else {
+                    showStadiumDirectory();
+                }
+                break;
+            case "seats":
+                if ("booking".equals(ledgerReturnScreen) && selectedEvent != null) {
+                    openEvent(selectedEvent);
+                } else {
+                    showStadiumDirectory();
+                }
+                break;
+            case "event-details":
+                // Back to wherever the event was opened from, which is not always
+                // the venue's own schedule.
+                if ("schedules".equals(eventReturnScreen) || selectedStadium == null) {
+                    showLiveSchedules();
+                } else {
+                    openStadium(selectedStadium);
+                }
+                break;
+            case "stadium-details":
                 showStadiumDirectory();
-            }
-        } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)
-                || "schedules".equals(currentScreen) || "occupancy".equals(currentScreen)
-                || "staff".equals(currentScreen)) {
-            showStadiumDirectory();
+                break;
+            case "stadium":
+            case "bookings":
+            case "schedules":
+            case "occupancy":
+            case "staff":
+            case "saved-seats":
+                showStadiumDirectory();
+                break;
+            default:
+                showStadiumDirectory();
+                break;
         }
     }
 
@@ -1324,9 +1384,9 @@ public final class StadiumBookingApp extends JFrame {
         schedule.setToolTipText("Choose a date and event at " + stadium.getName());
         schedule.addActionListener(event -> openStadium(stadium));
         actions.add(schedule);
-        JButton details = createSecondaryButton(Messages.get("directory.allEvents"));
-        details.addActionListener(event -> showStadiumDetails(stadium));
-        actions.add(details);
+        JButton events = createSecondaryButton(Messages.get("directory.allEvents"));
+        events.addActionListener(ignored -> showLiveSchedules());
+        actions.add(events);
         JButton ledger = createSecondaryButton("See seats already booked here");
         ledger.addActionListener(event -> {
             selectedStadium = stadium;
@@ -1352,6 +1412,11 @@ public final class StadiumBookingApp extends JFrame {
         if (event == null) {
             return;
         }
+        // Remember where we came from, so Back returns there rather than always
+        // assuming the venue's own schedule.
+        if (!"event-details".equals(currentScreen)) {
+            eventReturnScreen = currentScreen;
+        }
         currentScreen = "event-details";
         selectedEvent = event;
         Stadium stadium = StadiumData.getStadium(event.getStadiumId());
@@ -1374,7 +1439,7 @@ public final class StadiumBookingApp extends JFrame {
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         top.setOpaque(false);
         JButton back = createOutlineButton("\u2190 Back to the schedule", BLUE);
-        back.addActionListener(event2 -> goBackToScheduleFor(stadium));
+        back.addActionListener(ignored -> openStadium(stadium));
         top.add(back);
         page.add(top, BorderLayout.NORTH);
 
@@ -1391,12 +1456,6 @@ public final class StadiumBookingApp extends JFrame {
         page.add(row, BorderLayout.CENTER);
         page.add(buildEventActions(event, open), BorderLayout.SOUTH);
         return page;
-    }
-
-    private JButton goBackToScheduleFor(Stadium stadium) {
-        JButton back = createOutlineButton("\u2190 Back to the schedule", BLUE);
-        back.addActionListener(ignored -> openStadium(stadium));
-        return back;
     }
 
     /** The event headline over the venue's own plan, so it is recognisable at a glance. */
@@ -1582,6 +1641,214 @@ public final class StadiumBookingApp extends JFrame {
         schedules.addActionListener(ignored -> showLiveSchedules());
         actions.add(schedules);
         return actions;
+    }
+
+    // ---------------------------------------------------------------------
+    // Saved selections: choose now, finish later
+    // ---------------------------------------------------------------------
+
+    /**
+     * Saves the seats currently chosen so they can be picked up again later.
+     *
+     * <p>Without this there is nowhere to put "these are the ones I want" short of
+     * buying them, which is why picking seats and choosing them later was not
+     * possible at all.
+     */
+    private void saveCurrentSelection() {
+        List<Seat> chosen = seatMapPanel.getSelectedSeats();
+        if (chosen.isEmpty()) {
+            showWarning("Choose at least one seat before saving it.");
+            return;
+        }
+        JTextField label = new JTextField(18);
+        label.setFont(label.getFont().deriveFont(Font.PLAIN, 13f));
+        label.setText(selectedEvent == null ? "My seats" : selectedEvent.getHeadline());
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(4, 0, 4, 10);
+        form.add(new JLabel("Call it something you will recognise"), constraints);
+        constraints.gridy = 1;
+        form.add(label, constraints);
+
+        String choice = showDialogChoice(this, form, "Save these seats for later",
+                JOptionPane.PLAIN_MESSAGE, "Save", "Save this selection", BACK_LABEL);
+        if (!"Save this selection".equals(choice)) {
+            return;
+        }
+        try {
+            BookingStore.SavedSelection saved = bookingService.saveSelection(
+                    label.getText(), chosen);
+            seatMapPanel.clearSelection();
+            showStatus("Saved " + saved.getSeats().size() + " seat"
+                    + (saved.getSeats().size() == 1 ? "" : "s") + " as " + saved.getId()
+                    + "  •  find them under Saved seats");
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            showWarning(exception.getMessage());
+        }
+    }
+
+    /** The saved selections, and the way back into each one. */
+    private void showSavedSeats() {
+        currentScreen = "saved-seats";
+        setHeader(Messages.get("saved.title"),
+                "Seats you chose earlier, kept until you book them or discard them.");
+        contentHost.removeAll();
+        contentHost.add(buildSavedSeatsContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus("Saved seats");
+    }
+
+    private JPanel buildSavedSeatsContent() {
+        JPanel page = new JPanel(new BorderLayout(0, 12));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(16, 0, 20, 0));
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        top.setOpaque(false);
+        JButton back = createOutlineButton("\u2190 All stadiums", BLUE);
+        back.addActionListener(ignored -> showStadiumDirectory());
+        top.add(back);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel body = new JPanel();
+        body.setOpaque(false);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JPanel notice = createCard();
+        notice.setLayout(new BorderLayout(12, 0));
+        notice.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(WARNING_FOREGROUND), new EmptyBorder(12, 14, 12, 14)));
+        notice.add(sideText("<b>These seats are not booked yet.</b> Saving them keeps your choice "
+                        + "so you can come back later, but it does not hold them and does not "
+                        + "sell them. Somebody else may take them, and this page will say so when "
+                        + "that happens.", "#92400e", 11f), BorderLayout.CENTER);
+        notice.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                notice.getPreferredSize().height));
+        body.add(notice);
+        body.add(Box.createVerticalStrut(12));
+
+        List<BookingStore.SavedSelection> saved = bookingService.getSavedSelections();
+        if (saved.isEmpty()) {
+            JPanel empty = createCard();
+            empty.setLayout(new BorderLayout(0, 8));
+            empty.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(BORDER), new EmptyBorder(18, 16, 18, 16)));
+            empty.add(sideText("<b>Nothing saved yet.</b><br>Pick the seats you want on an event, "
+                    + "then press <b>Save these seats</b> on the booking screen. They will be here "
+                    + "next time you open the application.", "#475569", 11f), BorderLayout.CENTER);
+            JButton find = createPrimaryButton("Find an event to book");
+            find.addActionListener(ignored -> showStadiumDirectory());
+            JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            actions.setOpaque(false);
+            actions.add(find);
+            empty.add(actions, BorderLayout.SOUTH);
+            empty.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                    empty.getPreferredSize().height));
+            body.add(empty);
+        } else {
+            for (BookingStore.SavedSelection selection : saved) {
+                body.add(buildSavedSelectionCard(selection));
+                body.add(Box.createVerticalStrut(10));
+            }
+        }
+        page.add(body, BorderLayout.CENTER);
+        return page;
+    }
+
+    private JPanel buildSavedSelectionCard(BookingStore.SavedSelection selection) {
+        String problem = bookingService.whySelectionCannotBeUsed(selection);
+        Stadium stadium = StadiumData.getStadium(selection.getStadiumId());
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(14, 0));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(problem == null ? BORDER : WARNING_FOREGROUND),
+                new EmptyBorder(12, 14, 12, 14)));
+
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        text.add(sideText("<b>" + selection.getLabel() + "</b>", "#1e293b", 13f));
+        text.add(sideText(selection.getEventName()
+                + (stadium == null ? "" : "<br>" + stadium.getName()), "#475569", 11f));
+        text.add(sideText(selection.getSeats().stream().map(SeatKey::display)
+                .collect(java.util.stream.Collectors.joining(", ")), "#1e293b", 11f));
+        text.add(sideText(selection.getSeats().size() + " seat"
+                + (selection.getSeats().size() == 1 ? "" : "s") + "  \u2022  "
+                + BookingService.formatMoney(selection.getTotal())
+                + "  \u2022  saved "
+                + java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", Locale.ENGLISH)
+                        .withZone(java.time.ZoneId.systemDefault())
+                        .format(selection.getCreatedAt())
+                + "  \u2022  " + selection.getId(), "#64748b", 10f));
+        if (problem != null) {
+            text.add(sideText("<b>Cannot be booked:</b> " + problem, "#b45309", 10f));
+        }
+        card.add(text, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.setOpaque(false);
+        JButton resume = createPrimaryButton("Resume and book");
+        resume.setEnabled(problem == null);
+        if (problem != null) {
+            resume.setToolTipText(problem);
+        }
+        resume.addActionListener(ignored -> resumeSelection(selection));
+        JButton discard = createSecondaryButton("Discard",
+                problem == null ? new Color(185, 28, 28) : MUTED);
+        discard.addActionListener(ignored -> discardSelection(selection));
+        actions.add(resume);
+        actions.add(discard);
+        card.add(actions, BorderLayout.EAST);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                card.getPreferredSize().height));
+        return card;
+    }
+
+    /** Opens an event with the saved seats already chosen. */
+    private void resumeSelection(BookingStore.SavedSelection selection) {
+        StadiumEvent event = StadiumData.getEvent(selection.getEventId());
+        if (event == null) {
+            showWarning("That event is no longer on the schedule.");
+            return;
+        }
+        String problem = bookingService.whySelectionCannotBeUsed(selection);
+        if (problem != null) {
+            showWarning(problem);
+            return;
+        }
+        // Open the event first. It clears the seat map, so choosing the seats has
+        // to come after it or the selection is wiped on the way in.
+        selectedStadium = StadiumData.getStadium(selection.getStadiumId());
+        openEvent(event);
+        int restored = seatMapPanel.setSelectedKeys(selection.getSeats());
+        updateBookingSummary();
+        seatMapPanel.repaint();
+        showStatus("Picked up " + restored + " saved seat"
+                + (restored == 1 ? "" : "s"));
+    }
+
+    private void discardSelection(BookingStore.SavedSelection selection) {
+        String choice = showDialogChoice(this,
+                "Discard \"" + selection.getLabel() + "\"?\\n\\n"
+                        + "The saved seats are forgotten. Nothing was booked, so nothing is "
+                        + "charged and the seats go back on sale.",
+                "Discard saved seats", JOptionPane.QUESTION_MESSAGE, "Choose",
+                "Discard them", "Keep them");
+        if (!"Discard them".equals(choice)) {
+            return;
+        }
+        if (bookingService.deleteSavedSelection(selection.getId())) {
+            showStatus("Saved seats discarded");
+        } else {
+            showWarning("That selection could not be discarded. Please try again.");
+        }
+        contentHost.removeAll();
+        contentHost.add(buildSavedSeatsContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
     }
 
     private void openStadium(Stadium stadium) {
@@ -2662,7 +2929,7 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel selection = new JPanel(new GridBagLayout());
         selection.setOpaque(false);
-        selection.setPreferredSize(new Dimension(430, 52));
+        selection.setPreferredSize(new Dimension(380, 52));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.anchor = GridBagConstraints.WEST;
         JLabel selectedHeading = new JLabel(Messages.get("booking.yourSelection"));
@@ -2677,7 +2944,7 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel total = new JPanel(new GridBagLayout());
         total.setOpaque(false);
-        total.setPreferredSize(new Dimension(110, 52));
+        total.setPreferredSize(new Dimension(140, 52));
         GridBagConstraints totalConstraints = new GridBagConstraints();
         totalConstraints.anchor = GridBagConstraints.EAST;
         JLabel totalHeading = new JLabel(text("booking.total"));
@@ -2738,10 +3005,15 @@ public final class StadiumBookingApp extends JFrame {
         actions.setOpaque(false);
         clearSelectionButton = createSecondaryButton(text("booking.clearSeats"));
         clearSelectionButton.addActionListener(event -> clearSelection());
+        JButton saveSelection = createSecondaryButton(Messages.get("booking.saveSelection"));
+        saveSelection.setToolTipText("Keep these seats and choose them later. "
+                + "This does not book or hold them");
+        saveSelection.addActionListener(ignored -> saveCurrentSelection());
         JButton viewBooked = createSecondaryButton(Messages.get("booking.viewBooked"));
         viewBooked.setToolTipText("See every seat already taken for this event");
         viewBooked.addActionListener(event -> showSeatLedger());
         actions.add(clearSelectionButton);
+        actions.add(saveSelection);
         actions.add(viewBooked);
         summary.add(middle, BorderLayout.CENTER);
         summary.add(actions, BorderLayout.EAST);
@@ -4562,6 +4834,9 @@ public final class StadiumBookingApp extends JFrame {
                 break;
             case "staff":
                 contentHost.add(buildStaffContent(), BorderLayout.CENTER);
+                break;
+            case "saved-seats":
+                contentHost.add(buildSavedSeatsContent(), BorderLayout.CENTER);
                 break;
             default:
                 contentHost.add(buildDirectoryContent(), BorderLayout.CENTER);

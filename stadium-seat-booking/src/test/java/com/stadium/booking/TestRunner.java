@@ -104,6 +104,7 @@ public final class TestRunner {
         StadiumDetailsTest.register();
         StadiumDetailsTest.registerPictureSuite();
         ThemeTest.register();
+        SavedSelectionTest.register();
         System.exit(summary());
     }
 }

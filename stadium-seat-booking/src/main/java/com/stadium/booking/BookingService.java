@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -732,6 +733,84 @@ public class BookingService {
             }
         }
         return booking;
+    }
+
+    /**
+     * Saves the seats somebody has chosen so they can come back to them later.
+     *
+     * <p>This is not a booking and the seats are not held, so the screen says so.
+     * Without it there is no way to note down a choice and finish later.
+     *
+     * @param label a name the customer will recognise it by
+     * @return the saved selection
+     */
+    public BookingStore.SavedSelection saveSelection(String label, List<Seat> seats) {
+        if (activeEvent == null) {
+            throw new IllegalArgumentException("Choose an event before saving a selection");
+        }
+        if (seats == null || seats.isEmpty()) {
+            throw new IllegalArgumentException("Choose at least one seat to save");
+        }
+        String clean = label == null || label.isBlank() ? "My seats" : label.trim();
+        if (clean.length() > 120) {
+            clean = clean.substring(0, 120);
+        }
+        List<SeatKey> keys = new ArrayList<>();
+        for (Seat seat : seats) {
+            keys.add(seat.getKey());
+        }
+        String id = "SS-" + UUID.randomUUID().toString().replace("-", "")
+                .substring(0, 8).toUpperCase(Locale.ENGLISH);
+        BookingStore.SavedSelection selection = new BookingStore.SavedSelection(id, clean,
+                activeEvent.getStadiumId(), activeEvent.getId(), activeEvent.getHeadline(),
+                keys, getTotalCharge(seats), Instant.now());
+        if (store != null) {
+            try {
+                store.saveSelection(selection);
+            } catch (IOException exception) {
+                throw new IllegalStateException(
+                        "That selection could not be saved. Please try again.", exception);
+            }
+        }
+        return selection;
+    }
+
+    /** Every saved selection, newest first. */
+    public List<BookingStore.SavedSelection> getSavedSelections() {
+        return store == null ? new ArrayList<>() : store.readSelections();
+    }
+
+    /**
+     * Whether a saved selection can still be booked: the event must still be open
+     * and every seat still on sale.
+     */
+    public String whySelectionCannotBeUsed(BookingStore.SavedSelection selection) {
+        if (selection == null) {
+            return "That selection is no longer saved";
+        }
+        StadiumEvent event = StadiumData.getEvent(selection.getEventId());
+        if (event == null) {
+            return "The event is no longer on the schedule";
+        }
+        if (!isBookingOpen(event)) {
+            return getBookingRestrictionMessage(event);
+        }
+        List<String> taken = new ArrayList<>();
+        for (SeatKey key : selection.getSeats()) {
+            if (!isSeatSelectable(key)) {
+                taken.add(key.display());
+            }
+        }
+        if (!taken.isEmpty()) {
+            return "Since you saved these, " + String.join(", ", taken)
+                    + (taken.size() == 1 ? " has" : " have") + " been booked";
+        }
+        return null;
+    }
+
+    /** Forgets a saved selection. */
+    public boolean deleteSavedSelection(String id) {
+        return store != null && store.deleteSelection(id);
     }
 
     /** Cancels a reservation and returns its seats to that event's inventory. */

@@ -83,6 +83,18 @@ public final class BookingStore {
                     + ")");
             statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_seats_reference "
                     + "ON booking_seats(reference)");
+            // Seats picked but not yet paid for, so a customer can choose now and
+            // come back to them later. Separate from bookings because nothing is
+            // sold and the seats are not held.
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS saved_selections ("
+                    + "id VARCHAR(64) PRIMARY KEY, "
+                    + "label VARCHAR(120) NOT NULL, "
+                    + "stadium_id VARCHAR(80) NOT NULL, "
+                    + "event_id VARCHAR(80) NOT NULL, "
+                    + "event_name VARCHAR(255) NOT NULL, "
+                    + "seats VARCHAR(8000) NOT NULL, "
+                    + "total DECIMAL(12,2) NOT NULL, "
+                    + "created_at BIGINT NOT NULL)");
         }
     }
 
@@ -141,6 +153,143 @@ public final class BookingStore {
             }
         }
         return bookings;
+    }
+
+    /**
+     * A set of seats somebody has chosen but not yet paid for.
+     *
+     * <p>Deliberately not a booking: nothing is sold and the seats are not held, so
+     * a saved selection is a note to self that goes stale if somebody else buys
+     * those seats. That is why it says so on the screen.
+     */
+    public static final class SavedSelection {
+        private final String id;
+        private final String label;
+        private final String stadiumId;
+        private final String eventId;
+        private final String eventName;
+        private final List<SeatKey> seats;
+        private final double total;
+        private final Instant createdAt;
+
+        SavedSelection(String id, String label, String stadiumId, String eventId,
+                       String eventName, List<SeatKey> seats, double total,
+                       Instant createdAt) {
+            this.id = id;
+            this.label = label;
+            this.stadiumId = stadiumId;
+            this.eventId = eventId;
+            this.eventName = eventName;
+            this.seats = seats;
+            this.total = total;
+            this.createdAt = createdAt;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public String getStadiumId() {
+            return stadiumId;
+        }
+
+        public String getEventId() {
+            return eventId;
+        }
+
+        public String getEventName() {
+            return eventName;
+        }
+
+        public List<SeatKey> getSeats() {
+            return seats;
+        }
+
+        public double getTotal() {
+            return total;
+        }
+
+        public Instant getCreatedAt() {
+            return createdAt;
+        }
+    }
+
+    /** Stores a chosen set of seats so it can be picked up again later. */
+    public void saveSelection(SavedSelection selection) throws IOException {
+        if (file == null) {
+            return;
+        }
+        try (Connection connection = openConnection()) {
+            initializeSchema();
+            try (PreparedStatement insert = connection.prepareStatement(
+                    "MERGE INTO saved_selections (id, label, stadium_id, event_id, event_name, "
+                            + "seats, total, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+                insert.setString(1, selection.getId());
+                insert.setString(2, selection.getLabel());
+                insert.setString(3, selection.getStadiumId());
+                insert.setString(4, selection.getEventId());
+                insert.setString(5, selection.getEventName());
+                insert.setString(6, encodeSeats(selection.getSeats()));
+                insert.setBigDecimal(7, java.math.BigDecimal.valueOf(selection.getTotal()));
+                insert.setLong(8, selection.getCreatedAt().toEpochMilli());
+                insert.executeUpdate();
+            }
+        } catch (SQLException exception) {
+            throw new IOException("Could not save that selection", exception);
+        }
+    }
+
+    /** Every saved selection, newest first. */
+    public List<SavedSelection> readSelections() {
+        List<SavedSelection> saved = new ArrayList<>();
+        if (file == null) {
+            return saved;
+        }
+        try {
+            initializeSchema();
+            try (Connection connection = openConnection();
+                 Statement statement = connection.createStatement();
+                 ResultSet results = statement.executeQuery(
+                         "SELECT id, label, stadium_id, event_id, event_name, seats, total, "
+                                 + "created_at FROM saved_selections "
+                                 + "ORDER BY created_at DESC, id DESC")) {
+                while (results.next()) {
+                    saved.add(new SavedSelection(
+                            results.getString("id"),
+                            results.getString("label"),
+                            results.getString("stadium_id"),
+                            results.getString("event_id"),
+                            results.getString("event_name"),
+                            decodeSeats(results.getString("seats")),
+                            results.getBigDecimal("total").doubleValue(),
+                            Instant.ofEpochMilli(results.getLong("created_at"))));
+                }
+            }
+        } catch (IOException | SQLException | RuntimeException exception) {
+            return saved;
+        }
+        return saved;
+    }
+
+    /** Forgets one saved selection, once it has been booked or abandoned. */
+    public boolean deleteSelection(String id) {
+        if (file == null || id == null) {
+            return false;
+        }
+        try (Connection connection = openConnection()) {
+            initializeSchema();
+            try (PreparedStatement delete = connection.prepareStatement(
+                    "DELETE FROM saved_selections WHERE id = ?")) {
+                delete.setString(1, id);
+                return delete.executeUpdate() > 0;
+            }
+        } catch (IOException | SQLException exception) {
+            return false;
+        }
     }
 
     /**

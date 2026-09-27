@@ -601,6 +601,42 @@ final class SeatMapPanel extends JPanel {
         return holdService.secondsRemaining(key);
     }
 
+    /**
+     * Chooses a set of seats, ignoring any that have since been sold, so a saved
+     * selection can be picked up again.
+     *
+     * @return how many of the seats were still available
+     */
+    int setSelectedKeys(List<SeatKey> keys) {
+        if (keys == null) {
+            return 0;
+        }
+        Stadium stadium = bookingService.getActiveStadium();
+        StadiumEvent event = bookingService.getActiveEvent();
+        if (stadium == null || event == null) {
+            return 0;
+        }
+        selectedSeats.clear();
+        holdService.releaseAllFor(holdOwner);
+        int restored = 0;
+        for (SeatKey key : keys) {
+            if (!bookingService.isSeatSelectable(key)) {
+                continue;
+            }
+            if (holdService.hold(key, event, holdOwner) != null) {
+                continue;
+            }
+            selectedSeats.add(key);
+            restored++;
+        }
+        if (!selectedSeats.isEmpty()) {
+            lastSeatValue.setText(selectedSeats.size() + " seat"
+                    + (selectedSeats.size() == 1 ? "" : "s") + " picked up from your saved list");
+        }
+        repaint();
+        return restored;
+    }
+
     List<Seat> getSelectedSeats() {
         List<Seat> seats = new ArrayList<>();
         for (SeatKey key : selectedSeats) {
