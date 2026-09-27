@@ -33,6 +33,11 @@ A professional desktop stadium directory and seat-booking application built with
 - Scalable map rendering, from 3,000-seat grounds up to Namboole's 45,202
 - Tapping a seat shows its exact seat number, status and price
 - No limit on the number of bookings per person; each reservation can contain up to six seats
+- Each reservation is spread across the four sections, so six seats land two in each of two
+  sections and four land one in each of four
+- Five-minute seat holds with a live countdown, so two people cannot pick the same seat and
+  only discover it at confirmation
+- Held seats show their own colour on the map and a second customer is turned away at once
 - Booking confirmation with a unique reference
 - Searchable booking history
 - Click any booking row to open complete booking and customer details
@@ -43,9 +48,42 @@ A professional desktop stadium directory and seat-booking application built with
 - Hover, pressed and released highlighting on every button so the targeted control is always obvious
 - Status bar and tooltip name the button under the pointer and the button being clicked
 - Booking cancellation
+- Payment step before the ticket is issued: cash at the venue, or mobile money
+- Printable e-ticket with the reference, event, venue, seats, fees and total
+- Ticket check code derived from the reference and seats, so a paper ticket can be
+  matched back to the database by eye
+- Ticket can be saved as text or sent to a printer
+- Export bookings to CSV, and the occupancy report to its own CSV
+- **Occupancy** report across every venue: events, seats on sale, seats booked, vacancy
+  and a per-section breakdown, with rows that sum to the totals
+- Keyboard seat selection: the arrow keys walk the grid and Enter or Space holds a seat,
+  so booking works without a mouse
+- Accessible names and descriptions on the search fields, customer fields and navigation
+- Interface available in English, Luganda and Swahili, switchable from the header
+- Staff PIN gates the screens that show customer contact details
+- Customer names are shown partially and email and phone are withheld until someone
+  signs in, so contact details are not exposed to whoever opens the application
+- The PIN is stored only as a salted hash, and five wrong attempts lock the session
 - Persistent H2 database for bookings and customer details
 - Bookings section reads complete records from the database
+- Each booking is written to the database in its own transaction, and seats are held in a
+  table with a primary key of event plus seat position, so the database itself refuses to
+  sell the same seat twice
+- Booking references are allocated by reading the database, so two people booking at the
+  same time never collide
 - No external database server required; the embedded database is bundled in `lib/`
+
+## Tests
+
+```bash
+./run-tests.sh
+```
+
+Seventy-two tests covering the venue and event data, pricing and booking rules, database
+persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
+the three languages and the occupancy report. The runner needs nothing but a JDK, so no
+build tool or network access is required. Two of them are regression tests for the defect
+where a confirmed booking could be silently destroyed when two people saved at once.
 
 ## Included sample data
 
@@ -103,6 +141,16 @@ javac -cp 'lib/*' -d build/classes $(find src/main/java -name '*.java' -print)
 java -cp 'build/classes:lib/*' com.stadium.booking.StadiumBookingApp
 ```
 
+## Build with Maven
+
+A `pom.xml` is included for environments that prefer Maven. It packages the application and
+copies the H2 driver next to the jar:
+
+```bash
+mvn -q package
+java -jar target/stadium-select.jar
+```
+
 ## How to use it
 
 1. Search for a stadium or choose one from the directory cards.
@@ -113,6 +161,25 @@ java -cp 'build/classes:lib/*' com.stadium.booking.StadiumBookingApp
 6. Review the price outline: each selected seat, row tier, subtotal, booking fee and total due.
 7. Press **Confirm booked seats** to complete the reservation.
 8. Review the booked seat numbers in the confirmation message.
-9. Open **My bookings** to search, review or cancel a reservation.
+9. Choose how to pay. Cash at the venue is the default.
+10. Save or print the ticket that is issued.
+11. Open **My bookings** to search, review or cancel a reservation. This asks for the staff
+    PIN; the default is `1234`.
 
-Bookings are stored in the embedded H2 database `stadium-bookings.mv.db` in the project working directory. Delete that file to reset the database. Older `stadium-bookings.dat` files are migrated automatically when found.
+The **Occupancy** button in the header shows how full every venue is. The **Booked seats**
+button lists every seat already taken, by venue and event.
+
+## Notes
+
+Bookings are stored in the embedded H2 database `stadium-bookings.mv.db` in the project
+working directory. Delete that file to reset the database. Older `stadium-bookings.dat`
+files are migrated automatically when found.
+
+**Mobile money is simulated.** The payment step records a mobile money authorisation
+locally and labels it as such; no money moves and no provider credentials ship with this
+build. A real transfer needs a merchant account with a payment provider, wired in at
+`PaymentRecord`. Cash at the venue needs no third party and is the default.
+
+**Two capacities are indicative, not published.** Kyabazinga Stadium (12,000) and Mbale
+Municipal Stadium (5,000) are real FUFA venues, but their capacities have not been
+officially published. Every other capacity is the published figure.

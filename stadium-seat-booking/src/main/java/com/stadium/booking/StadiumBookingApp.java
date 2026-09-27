@@ -108,7 +108,7 @@ public final class StadiumBookingApp extends JFrame {
     private final JPanel contentHost = new JPanel(new BorderLayout());
     private final JLabel headerTitle = new JLabel();
     private final JLabel headerSubtitle = new JLabel();
-    private final JLabel statusValue = new JLabel("Choose a stadium to begin");
+    private final JLabel statusValue = new JLabel(Messages.get("status.chooseStadium"));
     private final SearchField stadiumSearchField =
             new SearchField("Search stadium, city, team or artist");
     private final SearchField eventSearchField =
@@ -120,7 +120,7 @@ public final class StadiumBookingApp extends JFrame {
     private final JTextField nameField = new JTextField();
     private final JTextField emailField = new JTextField();
     private final JTextField phoneField = new JTextField();
-    private final JLabel selectedSeatsValue = new JLabel("No seats selected");
+    private final JLabel selectedSeatsValue = new JLabel(text("booking.noSeats"));
     private final JLabel totalValue = new JLabel("$0.00");
     private final JLabel bookingAvailabilityValue = new JLabel();
     private final JLabel bookingCountdownValue = new JLabel();
@@ -129,10 +129,12 @@ public final class StadiumBookingApp extends JFrame {
     private final Map<JButton, StadiumEvent> eventActionButtons = new LinkedHashMap<>();
     private final DefaultTableModel bookingTableModel;
     private final JTable bookingTable;
-    private final JButton backNavButton = new FeedbackButton("← Back");
-    private final JButton stadiumNavButton = new FeedbackButton("Stadiums");
-    private final JButton bookingsNavButton = new FeedbackButton("My bookings");
-    private final JButton seatLedgerNavButton = new FeedbackButton("Booked seats");
+    private JComboBox<Messages.Language> languageCombo;
+    private final JButton backNavButton = new FeedbackButton(Messages.get("nav.back"));
+    private final JButton stadiumNavButton = new FeedbackButton(Messages.get("nav.venues"));
+    private final JButton bookingsNavButton = new FeedbackButton(Messages.get("nav.bookings"));
+    private final JButton seatLedgerNavButton = new FeedbackButton(Messages.get("nav.bookedSeats"));
+    private final JButton occupancyNavButton = new FeedbackButton(Messages.get("nav.occupancy"));
 
     private Stadium selectedStadium;
     private StadiumEvent selectedEvent;
@@ -262,6 +264,9 @@ public final class StadiumBookingApp extends JFrame {
         });
     }
 
+    /** Rebuilt whenever the language changes. */
+    private JLabel brandLabel;
+
     private void buildShell() {
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(PAGE);
@@ -287,7 +292,8 @@ public final class StadiumBookingApp extends JFrame {
         constraints.gridy = 0;
         constraints.gridwidth = 2;
         constraints.anchor = GridBagConstraints.WEST;
-        JLabel brand = new JLabel("STADIUM SELECT  /  LIVE EVENT TICKETS");
+        JLabel brand = new JLabel(text("app.tagline"));
+        brandLabel = brand;
         brand.setForeground(new Color(147, 197, 253));
         brand.setFont(brand.getFont().deriveFont(Font.BOLD, 10f));
         titleBlock.add(brand, constraints);
@@ -304,25 +310,42 @@ public final class StadiumBookingApp extends JFrame {
         constraints.insets = new Insets(3, 0, 0, 0);
         titleBlock.add(headerSubtitle, constraints);
 
+        languageCombo = new JComboBox<>(Messages.Language.values());
+        languageCombo.setSelectedItem(Messages.getLanguage());
+        languageCombo.setFont(languageCombo.getFont().deriveFont(Font.BOLD, 10f));
+        languageCombo.setFocusable(false);
+        languageCombo.setPreferredSize(new Dimension(110, 28));
+        languageCombo.setToolTipText("Change the interface language");
+        languageCombo.addActionListener(event -> {
+            Messages.setLanguage((Messages.Language) languageCombo.getSelectedItem());
+            applyLanguage();
+        });
+
         JPanel navigation = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 17));
         navigation.setOpaque(false);
+        navigation.add(languageCombo);
         styleHeaderButton(backNavButton);
         styleHeaderButton(stadiumNavButton);
         styleHeaderButton(bookingsNavButton);
         styleHeaderButton(seatLedgerNavButton);
+        styleHeaderButton(occupancyNavButton);
         backNavButton.addActionListener(event -> goBack());
         stadiumNavButton.addActionListener(event -> showStadiumDirectory());
         bookingsNavButton.addActionListener(event -> showBookings());
         seatLedgerNavButton.addActionListener(event -> showSeatLedger());
+        occupancyNavButton.addActionListener(event -> showOccupancyReport());
         describe(backNavButton, "Back", "Return to the previous screen");
         describe(stadiumNavButton, "Venues", "Show every stadium and concert venue");
         describe(bookingsNavButton, "My bookings", "Sign in and review your reservations");
         describe(seatLedgerNavButton, "Booked seats",
                 "Sign in and see which seats are already taken at each venue and event");
+        describe(occupancyNavButton, "Occupancy",
+                "Sign in and see how full each venue and section is");
         navigation.add(backNavButton);
         navigation.add(stadiumNavButton);
         navigation.add(bookingsNavButton);
         navigation.add(seatLedgerNavButton);
+        navigation.add(occupancyNavButton);
 
         header.add(titleBlock, BorderLayout.WEST);
         header.add(navigation, BorderLayout.EAST);
@@ -359,6 +382,48 @@ public final class StadiumBookingApp extends JFrame {
         status.add(label, BorderLayout.WEST);
         status.add(statusValue, BorderLayout.CENTER);
         return status;
+    }
+
+    /** Shorthand for the current language's wording. */
+    private static String text(String key) {
+        return Messages.get(key);
+    }
+
+    private static String text(String key, Object... arguments) {
+        return Messages.get(key, arguments);
+    }
+
+    /** Re-applies the current language to the header, then redraws the screen. */
+    private void applyLanguage() {
+        if (brandLabel != null) {
+            brandLabel.setText(text("app.tagline"));
+        }
+        occupancyNavButton.setText(text("nav.occupancy"));
+        seatMapPanel.retranslate();
+        backNavButton.setText(text("nav.back"));
+        stadiumNavButton.setText(text("nav.venues"));
+        bookingsNavButton.setText(text("nav.bookings"));
+        seatLedgerNavButton.setText(text("nav.bookedSeats"));
+        if ("directory".equals(currentScreen)) {
+            setHeader(text("directory.title"), text("directory.subtitle"));
+            refreshDirectoryContent();
+        } else if ("booking".equals(currentScreen) && selectedStadium != null) {
+            refreshBookingScreen();
+        }
+    }
+
+    /** Rebuilds the booking screen so its wording follows the language. */
+    private void refreshBookingScreen() {
+        if (selectedEvent == null || selectedStadium == null) {
+            return;
+        }
+        setHeader(text("booking.title"),
+                selectedStadium.getName() + "  •  " + selectedEvent.getHeadline());
+        contentHost.removeAll();
+        contentHost.add(buildBookingScreen(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        updateBookingSummary();
     }
 
     private void setHeader(String title, String subtitle) {
@@ -399,7 +464,7 @@ public final class StadiumBookingApp extends JFrame {
                 showStadiumDirectory();
             }
         } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)
-                || "schedules".equals(currentScreen)) {
+                || "schedules".equals(currentScreen) || "occupancy".equals(currentScreen)) {
             showStadiumDirectory();
         }
     }
@@ -412,7 +477,7 @@ public final class StadiumBookingApp extends JFrame {
         currentScreen = "directory";
         selectedStadium = null;
         selectedEvent = null;
-        setHeader("Choose your stadium", "Start with the venue, then choose the date and event you want to attend.");
+        setHeader(Messages.get("directory.title"), Messages.get("directory.subtitle"));
         refreshDirectoryContent();
         showStatus("Choose a stadium to begin");
     }
@@ -452,12 +517,12 @@ public final class StadiumBookingApp extends JFrame {
         searchCard.setLayout(new BorderLayout(14, 0));
         searchCard.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 16, 14, 16)));
-        JLabel searchLabel = new JLabel("FIND A VENUE");
+        JLabel searchLabel = new JLabel(text("directory.findVenue"));
         searchLabel.setForeground(MUTED);
         searchLabel.setFont(searchLabel.getFont().deriveFont(Font.BOLD, 10f));
         searchLabel.setPreferredSize(new Dimension(105, 38));
         searchCard.add(searchLabel, BorderLayout.WEST);
-        searchCard.add(buildSearchBar(stadiumSearchField, "Search stadium, city, team or artist"), BorderLayout.CENTER);
+        searchCard.add(buildSearchBar(stadiumSearchField, text("directory.search.hint")), BorderLayout.CENTER);
         topStack.add(searchCard);
         page.add(topStack, BorderLayout.NORTH);
 
@@ -528,17 +593,17 @@ public final class StadiumBookingApp extends JFrame {
         constraints.anchor = GridBagConstraints.WEST;
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.weightx = 1;
-        JLabel eyebrow = new JLabel("VENUE DIRECTORY");
+        JLabel eyebrow = new JLabel(text("directory.hero.eyebrow"));
         eyebrow.setForeground(BLUE_DARK);
         eyebrow.setFont(eyebrow.getFont().deriveFont(Font.BOLD, 10f));
         copy.add(eyebrow, constraints);
-        JLabel title = new JLabel("Find your next live event");
+        JLabel title = new JLabel(text("directory.hero.title"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 22f));
         constraints.gridy = 1;
         constraints.insets = new Insets(5, 0, 0, 0);
         copy.add(title, constraints);
-        JLabel subtitle = new JLabel("Browse stadiums, check what is on, and reserve the right seats in a few clear steps.");
+        JLabel subtitle = new JLabel(Messages.get("directory.hero.subtitle"));
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 12f));
         constraints.gridy = 2;
@@ -547,7 +612,7 @@ public final class StadiumBookingApp extends JFrame {
 
         // Opens the cross-venue schedule, so it is a real button with the same
         // hover and press feedback as the rest of the interface.
-        JButton liveSchedules = new FeedbackButton("  LIVE SCHEDULES  ");
+        JButton liveSchedules = new FeedbackButton("  " + text("nav.liveSchedules") + "  ");
         liveSchedules.setFont(liveSchedules.getFont().deriveFont(Font.BOLD, 10f));
         liveSchedules.setForeground(BLUE_DARK);
         liveSchedules.setBackground(new Color(219, 234, 254));
@@ -623,7 +688,7 @@ public final class StadiumBookingApp extends JFrame {
                 + (next == null ? "No events listed" : next.getDateLabel()));
         facts.setForeground(TEXT);
         facts.setFont(facts.getFont().deriveFont(Font.PLAIN, 10f));
-        JButton open = createOutlineButton("Open stadium", accent);
+        JButton open = createOutlineButton(Messages.get("directory.open"), accent);
         open.addActionListener(event -> openStadium(stadium));
         footer.add(facts, BorderLayout.CENTER);
         footer.add(open, BorderLayout.EAST);
@@ -715,7 +780,7 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel top = new JPanel(new BorderLayout(12, 0));
         top.setOpaque(false);
-        JButton back = createOutlineButton("← All stadiums", accent);
+        JButton back = createOutlineButton(Messages.get("common.allVenues"), accent);
         back.addActionListener(event -> showStadiumDirectory());
         top.add(back, BorderLayout.WEST);
         JLabel venueType = new JLabel(stadium.getVenueType().toUpperCase(Locale.ENGLISH));
@@ -792,7 +857,7 @@ public final class StadiumBookingApp extends JFrame {
         titleBox.setOpaque(false);
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.anchor = GridBagConstraints.WEST;
-        JLabel title = new JLabel("Notices & requests");
+        JLabel title = new JLabel(Messages.get("stadium.notices"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
         titleBox.add(title, constraints);
@@ -803,7 +868,7 @@ public final class StadiumBookingApp extends JFrame {
         constraints.insets = new Insets(3, 0, 0, 0);
         titleBox.add(subtitle, constraints);
         heading.add(titleBox, BorderLayout.CENTER);
-        JButton request = createOutlineButton("Submit a special request", BLUE);
+        JButton request = createOutlineButton(Messages.get("stadium.specialRequest"), BLUE);
         request.addActionListener(event -> showSpecialRequestDialog(stadium));
         heading.add(request, BorderLayout.EAST);
         card.add(heading, BorderLayout.NORTH);
@@ -963,11 +1028,11 @@ public final class StadiumBookingApp extends JFrame {
         headingCopy.setOpaque(false);
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.anchor = GridBagConstraints.WEST;
-        JLabel title = new JLabel("Upcoming schedule");
+        JLabel title = new JLabel(Messages.get("stadium.upcoming"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 17f));
         headingCopy.add(title, constraints);
-        JLabel subtitle = new JLabel("Choose a date, then select the game or concert you want to attend.");
+        JLabel subtitle = new JLabel(Messages.get("stadium.subtitle"));
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
         constraints.gridy = 1;
@@ -982,7 +1047,7 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel filters = new JPanel(new BorderLayout(12, 0));
         filters.setOpaque(false);
-        filters.add(buildSearchBar(eventSearchField, "Search teams, artists, sport or date"), BorderLayout.CENTER);
+        filters.add(buildSearchBar(eventSearchField, text("stadium.search.hint")), BorderLayout.CENTER);
         scheduleDates = new ArrayList<>(StadiumData.getDates(stadium.getId()));
         String[] dateChoices = new String[scheduleDates.size() + 1];
         dateChoices[0] = "All dates";
@@ -1242,7 +1307,7 @@ public final class StadiumBookingApp extends JFrame {
      */
     private void showLiveSchedules() {
         currentScreen = "schedules";
-        setHeader("Live schedules", "Every upcoming game and concert across all eleven Ugandan venues.");
+        setHeader(text("nav.liveSchedules"), "Every upcoming game and concert across all eleven Ugandan venues.");
         contentHost.removeAll();
         contentHost.add(buildLiveSchedulesContent(), BorderLayout.CENTER);
         contentHost.revalidate();
@@ -1292,7 +1357,7 @@ public final class StadiumBookingApp extends JFrame {
         JPanel searchWrap = new JPanel(new BorderLayout(0, 3));
         searchWrap.setOpaque(false);
         searchWrap.setPreferredSize(new Dimension(320, 56));
-        searchWrap.add(buildSearchBar(liveSearchField, "Search teams, artists, venues or dates"),
+        searchWrap.add(buildSearchBar(liveSearchField, text("stadium.search.hint")),
                 BorderLayout.CENTER);
         filters.add(searchWrap);
         liveDateCombo = new JComboBox<>();
@@ -1492,7 +1557,7 @@ public final class StadiumBookingApp extends JFrame {
         bookingService.selectEvent(event);
         seatMapPanel.refreshStatuses();
         currentScreen = "booking";
-        setHeader("Book your seats", selectedStadium.getName() + "  •  " + event.getHeadline());
+        setHeader(Messages.get("booking.title"), selectedStadium.getName() + "  •  " + event.getHeadline());
         contentHost.removeAll();
         contentHost.add(buildBookingScreen(), BorderLayout.CENTER);
         contentHost.revalidate();
@@ -1520,7 +1585,7 @@ public final class StadiumBookingApp extends JFrame {
         left.setOpaque(false);
         GridBagConstraints backConstraints = new GridBagConstraints();
         backConstraints.anchor = GridBagConstraints.WEST;
-        JButton back = createOutlineButton("← Back to schedule", accent);
+        JButton back = createOutlineButton(Messages.get("common.backToSchedule"), accent);
         back.addActionListener(event -> openStadium(selectedStadium));
         left.add(back, backConstraints);
 
@@ -1619,11 +1684,11 @@ public final class StadiumBookingApp extends JFrame {
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 18, 14, 18)));
         JPanel heading = new JPanel(new BorderLayout());
         heading.setOpaque(false);
-        JLabel title = new JLabel("Your details");
+        JLabel title = new JLabel(text("booking.yourDetails"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
         heading.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Just three details are needed");
+        JLabel hint = new JLabel(text("booking.threeDetails"));
         hint.setForeground(MUTED);
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
         heading.add(hint, BorderLayout.EAST);
@@ -1663,11 +1728,11 @@ public final class StadiumBookingApp extends JFrame {
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 18, 14, 18)));
         JPanel heading = new JPanel(new BorderLayout());
         heading.setOpaque(false);
-        JLabel title = new JLabel("Choose your seats");
+        JLabel title = new JLabel(text("booking.chooseSeats"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 15f));
         heading.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("No limit per person • up to 6 seats per reservation");
+        JLabel hint = new JLabel(Messages.get("booking.limitHint"));
         hint.setForeground(MUTED);
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 11f));
         heading.add(hint, BorderLayout.EAST);
@@ -1688,18 +1753,18 @@ public final class StadiumBookingApp extends JFrame {
         titleBox.setOpaque(false);
         GridBagConstraints titleConstraints = new GridBagConstraints();
         titleConstraints.anchor = GridBagConstraints.WEST;
-        JLabel title = new JLabel("Price outline");
+        JLabel title = new JLabel(text("booking.priceOutline"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
         titleBox.add(title, titleConstraints);
-        JLabel subtitle = new JLabel("Every charge is shown before you confirm");
+        JLabel subtitle = new JLabel(Messages.get("booking.priceSubtitle"));
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 10f));
         titleConstraints.gridy = 1;
         titleConstraints.insets = new Insets(3, 0, 0, 0);
         titleBox.add(subtitle, titleConstraints);
         heading.add(titleBox, BorderLayout.WEST);
-        JLabel feeHint = new JLabel("One booking fee per reservation");
+        JLabel feeHint = new JLabel(Messages.get("booking.feeHint"));
         feeHint.setForeground(MUTED);
         feeHint.setFont(feeHint.getFont().deriveFont(Font.PLAIN, 10f));
         heading.add(feeHint, BorderLayout.EAST);
@@ -1712,11 +1777,11 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel actions = new JPanel(new BorderLayout(10, 0));
         actions.setOpaque(false);
-        JLabel note = new JLabel("Seat prices vary by row and section.");
+        JLabel note = new JLabel(Messages.get("booking.priceHint"));
         note.setForeground(MUTED);
         note.setFont(note.getFont().deriveFont(Font.PLAIN, 10f));
         actions.add(note, BorderLayout.CENTER);
-        confirmBookingButton = createPrimaryButton("Confirm booked seats");
+        confirmBookingButton = createPrimaryButton(text("booking.confirm"));
         confirmBookingButton.addActionListener(event -> confirmBooking());
         actions.add(confirmBookingButton, BorderLayout.EAST);
         card.add(actions, BorderLayout.SOUTH);
@@ -1735,7 +1800,7 @@ public final class StadiumBookingApp extends JFrame {
         selection.setPreferredSize(new Dimension(430, 52));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.anchor = GridBagConstraints.WEST;
-        JLabel selectedHeading = new JLabel("YOUR SELECTION");
+        JLabel selectedHeading = new JLabel(Messages.get("booking.yourSelection"));
         selectedHeading.setForeground(new Color(170, 195, 229));
         selectedHeading.setFont(selectedHeading.getFont().deriveFont(Font.BOLD, 10f));
         selection.add(selectedHeading, constraints);
@@ -1750,7 +1815,7 @@ public final class StadiumBookingApp extends JFrame {
         total.setPreferredSize(new Dimension(110, 52));
         GridBagConstraints totalConstraints = new GridBagConstraints();
         totalConstraints.anchor = GridBagConstraints.EAST;
-        JLabel totalHeading = new JLabel("TOTAL");
+        JLabel totalHeading = new JLabel(text("booking.total"));
         totalHeading.setForeground(new Color(170, 195, 229));
         totalHeading.setFont(totalHeading.getFont().deriveFont(Font.BOLD, 10f));
         total.add(totalHeading, totalConstraints);
@@ -1765,7 +1830,7 @@ public final class StadiumBookingApp extends JFrame {
         availability.setPreferredSize(new Dimension(120, 52));
         GridBagConstraints availabilityConstraints = new GridBagConstraints();
         availabilityConstraints.anchor = GridBagConstraints.EAST;
-        JLabel availableHeading = new JLabel("VACANCY");
+        JLabel availableHeading = new JLabel(text("booking.vacancy"));
         availableHeading.setForeground(new Color(170, 195, 229));
         availableHeading.setFont(availableHeading.getFont().deriveFont(Font.BOLD, 10f));
         availability.add(availableHeading, availabilityConstraints);
@@ -1780,7 +1845,7 @@ public final class StadiumBookingApp extends JFrame {
         holds.setPreferredSize(new Dimension(150, 52));
         GridBagConstraints holdConstraints = new GridBagConstraints();
         holdConstraints.anchor = GridBagConstraints.EAST;
-        JLabel holdHeading = new JLabel("SEATS HELD");
+        JLabel holdHeading = new JLabel(text("booking.seatsHeld"));
         holdHeading.setForeground(new Color(170, 195, 229));
         holdHeading.setFont(holdHeading.getFont().deriveFont(Font.BOLD, 10f));
         holds.add(holdHeading, holdConstraints);
@@ -1806,9 +1871,9 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 3));
         actions.setOpaque(false);
-        clearSelectionButton = createSecondaryButton("Clear seats");
+        clearSelectionButton = createSecondaryButton(text("booking.clearSeats"));
         clearSelectionButton.addActionListener(event -> clearSelection());
-        JButton viewBooked = createSecondaryButton("View booked seats");
+        JButton viewBooked = createSecondaryButton(Messages.get("booking.viewBooked"));
         viewBooked.setToolTipText("See every seat already taken for this event");
         viewBooked.addActionListener(event -> showSeatLedger());
         actions.add(clearSelectionButton);
@@ -1831,7 +1896,7 @@ public final class StadiumBookingApp extends JFrame {
         pricingBreakdownHost.removeAll();
         List<Seat> selectedSeats = seatMapPanel.getSelectedSeats();
         if (selectedSeats.isEmpty()) {
-            JLabel empty = new JLabel("Select one or more vacant seats to see the full price outline.");
+            JLabel empty = new JLabel(Messages.get("booking.emptyPrice"));
             empty.setForeground(MUTED);
             empty.setFont(empty.getFont().deriveFont(Font.PLAIN, 11f));
             empty.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1880,7 +1945,8 @@ public final class StadiumBookingApp extends JFrame {
             return;
         }
         List<Seat> selectedSeats = seatMapPanel.getSelectedSeats();
-        selectedSeatsValue.setText(selectedSeats.isEmpty() ? "No seats selected" : joinSeatNames(selectedSeats));
+        selectedSeatsValue.setText(selectedSeats.isEmpty()
+                ? Messages.get("booking.noSeats") : joinSeatNames(selectedSeats));
         totalValue.setText(currency(bookingService.getTotalCharge(selectedSeats)));
         bookingAvailabilityValue.setText(String.format(Locale.US, "%.3f%%",
                 bookingService.getVacancyPercentage()));
@@ -1988,9 +2054,9 @@ public final class StadiumBookingApp extends JFrame {
                 new JComboBox<>(PaymentRecord.Method.values());
         methods.setSelectedItem(PaymentRecord.Method.CASH_AT_VENUE);
         JPanel form = new JPanel(new BorderLayout(0, 8));
-        form.add(new JLabel("How would you like to pay?"), BorderLayout.NORTH);
+        form.add(new JLabel(Messages.get("payment.question")), BorderLayout.NORTH);
         form.add(methods, BorderLayout.CENTER);
-        JLabel note = new JLabel("Total due: " + currency(booking.getTotal())
+        JLabel note = new JLabel(Messages.get("common.totalDue") + ": " + currency(booking.getTotal())
                 + (PaymentRecord.isRealProviderConfigured()
                 ? "" : "  •  mobile money is simulated, no money moves"));
         note.setForeground(MUTED);
@@ -2113,7 +2179,7 @@ public final class StadiumBookingApp extends JFrame {
         currentScreen = "directory";
         bookingSearchField.setText("");
         currentScreen = "bookings";
-        setHeader("My bookings", "Review, search and cancel reservations for every stadium and event.");
+        setHeader(text("nav.bookings"), "Review, search and cancel reservations for every stadium and event.");
         contentHost.removeAll();
         contentHost.add(buildBookingsContent(), BorderLayout.CENTER);
         contentHost.revalidate();
@@ -2148,13 +2214,13 @@ public final class StadiumBookingApp extends JFrame {
         titleConstraints.anchor = GridBagConstraints.WEST;
         titleConstraints.fill = GridBagConstraints.HORIZONTAL;
         titleConstraints.weightx = 1;
-        JLabel title = new JLabel("Booking history");
+        JLabel title = new JLabel(text("bookings.title"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 21f));
         titleConstraints.gridy = 1;
         titleConstraints.insets = new Insets(7, 0, 0, 0);
         titleBox.add(title, titleConstraints);
-        JLabel subtitle = new JLabel("Every confirmed or cancelled reservation in one place.");
+        JLabel subtitle = new JLabel(Messages.get("bookings.subtitle"));
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
         titleConstraints.gridy = 2;
@@ -2171,7 +2237,7 @@ public final class StadiumBookingApp extends JFrame {
         JPanel search = new JPanel(new BorderLayout(10, 0));
         search.setOpaque(false);
         search.setPreferredSize(new Dimension(390, 42));
-        search.add(buildSearchBar(bookingSearchField, "Search bookings"), BorderLayout.CENTER);
+        search.add(buildSearchBar(bookingSearchField, text("bookings.search.hint")), BorderLayout.CENTER);
         GridBagConstraints topSearchConstraints = new GridBagConstraints();
         topSearchConstraints.gridx = 1;
         topSearchConstraints.anchor = GridBagConstraints.NORTHEAST;
@@ -2185,7 +2251,7 @@ public final class StadiumBookingApp extends JFrame {
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
         JPanel tableHeader = new JPanel(new BorderLayout());
         tableHeader.setOpaque(false);
-        JLabel tableHint = new JLabel("Click any booking row to view the complete reservation and customer details.");
+        JLabel tableHint = new JLabel(Messages.get("bookings.hint"));
         tableHint.setForeground(MUTED);
         tableHint.setFont(tableHint.getFont().deriveFont(Font.PLAIN, 10f));
         tableHeader.add(tableHint, BorderLayout.WEST);
@@ -2200,12 +2266,12 @@ public final class StadiumBookingApp extends JFrame {
 
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         bottom.setOpaque(false);
-        JButton refresh = createSecondaryButton("Refresh");
+        JButton refresh = createSecondaryButton(text("bookings.refresh"));
         refresh.addActionListener(event -> refreshBookings());
-        JButton export = createSecondaryButton("Export CSV");
+        JButton export = createSecondaryButton(text("bookings.export"));
         export.setToolTipText("Write every booking to a spreadsheet file");
         export.addActionListener(event -> exportBookingsToCsv());
-        cancelBookingButton = createSecondaryButton("Cancel selected booking", new Color(185, 28, 28));
+        cancelBookingButton = createSecondaryButton(Messages.get("bookings.cancelSelected"), new Color(185, 28, 28));
         cancelBookingButton.addActionListener(event -> cancelSelectedBooking());
         bottom.add(refresh);
         bottom.add(export);
@@ -2427,6 +2493,148 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     // ---------------------------------------------------------------------
+    // Occupancy report
+    // ---------------------------------------------------------------------
+
+    /**
+     * Reports how full each venue is, section by section, across every event.
+     * This is the figure a venue manager actually needs, so it is computed from
+     * the database rather than from the current screen.
+     */
+    private void showOccupancyReport() {
+        if (!promptForSignIn()) {
+            showStatus("Sign in to view the occupancy report");
+            return;
+        }
+        currentScreen = "occupancy";
+        setHeader(Messages.get("occupancy.title"), Messages.get("occupancy.subtitle"));
+        contentHost.removeAll();
+        contentHost.add(buildOccupancyContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus("Occupancy report");
+    }
+
+    private JPanel buildOccupancyContent() {
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(20, 0, 22, 0));
+
+        JPanel top = new JPanel(new BorderLayout(16, 0));
+        top.setOpaque(false);
+        JPanel titleBox = new JPanel(new GridBagLayout());
+        titleBox.setOpaque(false);
+        GridBagConstraints backConstraints = new GridBagConstraints();
+        backConstraints.anchor = GridBagConstraints.WEST;
+        JButton back = createOutlineButton("← Back to stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        titleBox.add(back, backConstraints);
+        GridBagConstraints titleConstraints = new GridBagConstraints();
+        titleConstraints.gridx = 0;
+        titleConstraints.anchor = GridBagConstraints.WEST;
+        titleConstraints.fill = GridBagConstraints.HORIZONTAL;
+        titleConstraints.weightx = 1;
+        JLabel title = new JLabel(Messages.get("occupancy.allVenues"));
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 21f));
+        titleConstraints.gridy = 1;
+        titleConstraints.insets = new Insets(7, 0, 0, 0);
+        titleBox.add(title, titleConstraints);
+        JLabel subtitle = new JLabel(Messages.get("occupancy.note"));
+        subtitle.setForeground(MUTED);
+        subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
+        titleConstraints.gridy = 2;
+        titleConstraints.insets = new Insets(3, 0, 0, 0);
+        titleBox.add(subtitle, titleConstraints);
+        top.add(titleBox, BorderLayout.WEST);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel tableCard = createCard();
+        tableCard.setLayout(new BorderLayout(0, 10));
+        tableCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
+
+        DefaultTableModel model = new DefaultTableModel(
+                new Object[]{"Venue", "City", "Events", "Capacity", "Seats booked",
+                        "Vacancy", "A", "B", "C", "D"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = new JTable(model);
+        table.setBackground(WHITE);
+        table.setForeground(TEXT);
+        table.setRowHeight(30);
+        table.setGridColor(new Color(235, 240, 247));
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.getTableHeader().setBackground(SKY);
+        table.getTableHeader().setForeground(BLUE_DARK);
+        table.getTableHeader().setFont(table.getTableHeader().getFont().deriveFont(Font.BOLD, 11f));
+        int[] widths = {230, 110, 70, 100, 110, 90, 70, 70, 70, 70};
+        for (int column = 0; column < widths.length; column++) {
+            table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+
+        // Capacity is counted across every event at a venue, so a ground staging
+        // eight matches is measured against eight times its seat count.
+        OccupancyReport report = OccupancyReport.compute(bookingService);
+        for (OccupancyReport.Row row : report.getRows()) {
+            model.addRow(new Object[]{
+                    row.getStadium().getName(), row.getStadium().getCity(), row.getEvents(),
+                    formatCapacity(row.getSeatCapacity()), formatCapacity(row.getSeatsBooked()),
+                    String.format(Locale.US, "%.2f%%", row.getVacancyPercentage()),
+                    row.getSeatsInSection("A"), row.getSeatsInSection("B"),
+                    row.getSeatsInSection("C"), row.getSeatsInSection("D")});
+        }
+        model.addRow(new Object[]{"All venues", "", report.getTotalEvents(),
+                formatCapacity(report.getTotalCapacity()),
+                formatCapacity(report.getTotalBooked()),
+                String.format(Locale.US, "%.2f%%", report.getOverallVacancyPercentage()),
+                "", "", "", ""});
+
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+        tableCard.add(scroll, BorderLayout.CENTER);
+
+        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        bottom.setOpaque(false);
+        JButton export = createSecondaryButton(Messages.get("occupancy.export"));
+        export.addActionListener(event -> exportOccupancyCsv());
+        bottom.add(export);
+        tableCard.add(bottom, BorderLayout.SOUTH);
+        page.add(tableCard, BorderLayout.CENTER);
+        return page;
+    }
+
+    private void exportOccupancyCsv() {
+        StringBuilder sheet = new StringBuilder(
+                "Venue,City,Events,Capacity,SeatsBooked,VacancyPercent\n");
+        for (OccupancyReport.Row row : OccupancyReport.compute(bookingService).getRows()) {
+            sheet.append('"').append(row.getStadium().getName()).append("\",")
+                    .append('"').append(row.getStadium().getCity()).append("\",")
+                    .append(row.getEvents()).append(',')
+                    .append(row.getSeatCapacity()).append(',')
+                    .append(row.getSeatsBooked()).append(',')
+                    .append(String.format(Locale.US, "%.2f", row.getVacancyPercentage()))
+                    .append('\n');
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("occupancy.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            java.nio.file.Files.writeString(chooser.getSelectedFile().toPath(), sheet.toString());
+            showStatus("Occupancy report saved to " + chooser.getSelectedFile().getName());
+        } catch (java.io.IOException exception) {
+            showWarning("The report could not be saved: " + exception.getMessage());
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Booked seats ledger
     // ---------------------------------------------------------------------
 
@@ -2445,7 +2653,7 @@ public final class StadiumBookingApp extends JFrame {
                 ? selectedEvent : firstEventFor(target);
         ledgerReturnScreen = "booking".equals(currentScreen) ? "booking" : "directory";
         currentScreen = "seats";
-        setHeader("Booked seats", "See every seat already taken, by stadium and by event.");
+        setHeader(text("nav.bookedSeats"), text("seats.subtitle"));
         contentHost.removeAll();
         contentHost.add(buildSeatLedgerContent(), BorderLayout.CENTER);
         contentHost.revalidate();
@@ -2493,13 +2701,13 @@ public final class StadiumBookingApp extends JFrame {
         titleConstraints.anchor = GridBagConstraints.WEST;
         titleConstraints.fill = GridBagConstraints.HORIZONTAL;
         titleConstraints.weightx = 1;
-        JLabel title = new JLabel("Seats booked so far");
+        JLabel title = new JLabel(text("seats.title"));
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 21f));
         titleConstraints.gridy = 1;
         titleConstraints.insets = new Insets(7, 0, 0, 0);
         titleBox.add(title, titleConstraints);
-        JLabel subtitle = new JLabel("Occupancy of the venue and event you are booking on.");
+        JLabel subtitle = new JLabel(Messages.get("occupancy.vacancyNote"));
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
         titleConstraints.gridy = 2;
@@ -2569,7 +2777,7 @@ public final class StadiumBookingApp extends JFrame {
         tableCard.setLayout(new BorderLayout(0, 10));
         tableCard.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
-        JLabel hint = new JLabel("Every confirmed seat for the selected event, newest first.");
+        JLabel hint = new JLabel(Messages.get("seats.everyConfirmed"));
         hint.setForeground(MUTED);
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
         tableCard.add(hint, BorderLayout.NORTH);
@@ -3109,9 +3317,9 @@ public final class StadiumBookingApp extends JFrame {
         JPasswordField pin = new JPasswordField(10);
         pin.setFont(pin.getFont().deriveFont(Font.PLAIN, 13f));
         JPanel form = new JPanel(new BorderLayout(8, 6));
-        form.add(new JLabel("Staff PIN"), BorderLayout.NORTH);
+        form.add(new JLabel(Messages.get("common.pin")), BorderLayout.NORTH);
         form.add(pin, BorderLayout.CENTER);
-        JLabel hint = new JLabel("Default PIN is 1234. Contact details stay hidden until you sign in.");
+        JLabel hint = new JLabel(Messages.get("common.pinHint"));
         hint.setForeground(MUTED);
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
         form.add(hint, BorderLayout.SOUTH);

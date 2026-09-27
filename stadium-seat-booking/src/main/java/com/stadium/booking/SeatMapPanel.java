@@ -18,8 +18,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -78,7 +78,9 @@ final class SeatMapPanel extends JPanel {
     private final Map<String, SeatCanvas> canvases = new LinkedHashMap<>();
     private final JTabbedPane sectionTabs = new JTabbedPane();
     private final JLabel vacancyValue = new JLabel();
-    private final JLabel lastSeatValue = new JLabel("Prices fall from front to back");
+    private final JLabel lastSeatValue = new JLabel(Messages.get("seatMap.priceGuide"));
+    private JLabel seatMapTitle;
+    private JLabel hintLabel;
     private int keyboardRow = 1;
     private int keyboardNumber = 1;
     private String renderedStadiumId;
@@ -111,11 +113,13 @@ final class SeatMapPanel extends JPanel {
         copy.setOpaque(false);
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.anchor = GridBagConstraints.WEST;
-        JLabel title = new JLabel("SELECT A SEAT");
+        JLabel title = new JLabel(Messages.get("booking.selectSeat"));
+        seatMapTitle = title;
         title.setForeground(new Color(30, 64, 110));
         title.setFont(title.getFont().deriveFont(Font.BOLD, 11f));
         copy.add(title, constraints);
-        JLabel hint = new JLabel("Front rows are premium • tap a seat, or use the arrow keys");
+        JLabel hint = new JLabel(Messages.get("seatMap.hint"));
+        hintLabel = hint;
         hint.setForeground(new Color(100, 116, 139));
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
         constraints.gridy = 1;
@@ -246,11 +250,12 @@ final class SeatMapPanel extends JPanel {
     private JPanel buildLegend() {
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         legend.setOpaque(false);
-        legend.add(legendItem("Vacant", AVAILABLE_BACKGROUND, AVAILABLE_FOREGROUND));
-        legend.add(legendItem("Selected", SELECTED_BACKGROUND, SELECTED_FOREGROUND));
-        legend.add(legendItem("Held", HELD_BACKGROUND, HELD_FOREGROUND));
-        legend.add(legendItem("Booked", BOOKED_BACKGROUND, BOOKED_FOREGROUND));
-        legend.add(legendItem("Closed", CLOSED_BACKGROUND, CLOSED_FOREGROUND));
+        legendLabelRefs.clear();
+        legend.add(legendItem(LEGEND_KEYS[0], AVAILABLE_BACKGROUND, AVAILABLE_FOREGROUND));
+        legend.add(legendItem(LEGEND_KEYS[1], SELECTED_BACKGROUND, SELECTED_FOREGROUND));
+        legend.add(legendItem(LEGEND_KEYS[2], HELD_BACKGROUND, HELD_FOREGROUND));
+        legend.add(legendItem(LEGEND_KEYS[3], BOOKED_BACKGROUND, BOOKED_FOREGROUND));
+        legend.add(legendItem(LEGEND_KEYS[4], CLOSED_BACKGROUND, CLOSED_FOREGROUND));
         legend.add(Box.createHorizontalStrut(8));
         lastSeatValue.setForeground(new Color(71, 85, 105));
         lastSeatValue.setFont(lastSeatValue.getFont().deriveFont(Font.PLAIN, 10f));
@@ -258,7 +263,11 @@ final class SeatMapPanel extends JPanel {
         return legend;
     }
 
-    private JPanel legendItem(String text, Color background, Color foreground) {
+    /** The message keys behind the legend, in display order. */
+    private static final String[] LEGEND_KEYS = {
+            "legend.vacant", "legend.selected", "legend.held", "legend.booked", "legend.closed"};
+
+    private JPanel legendItem(String messageKey, Color background, Color foreground) {
         JPanel item = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         item.setOpaque(false);
         JLabel swatch = new JLabel("  ");
@@ -266,12 +275,42 @@ final class SeatMapPanel extends JPanel {
         swatch.setBackground(background);
         swatch.setBorder(BorderFactory.createLineBorder(foreground));
         swatch.setPreferredSize(new Dimension(17, 13));
-        JLabel label = new JLabel(text);
+        JLabel label = new JLabel(Messages.get(messageKey));
+        label.setName(messageKey);
         label.setForeground(new Color(71, 85, 105));
         label.setFont(label.getFont().deriveFont(Font.PLAIN, 10f));
         item.add(swatch);
         item.add(label);
+        legendLabelRefs.put(item, messageKey);
         return item;
+    }
+
+    private final Map<JPanel, String> legendLabelRefs = new LinkedHashMap<>();
+
+    /**
+     * Re-reads every label this panel owns after the language changes, so the
+     * seat map does not stay in the language it was built with.
+     */
+    void retranslate() {
+        if (seatMapTitle != null) {
+            seatMapTitle.setText(Messages.get("booking.selectSeat"));
+        }
+        lastSeatValue.setText(selectedSeats.isEmpty()
+                ? Messages.get("seatMap.priceGuide")
+                : lastSeatValue.getText().replaceAll("\s*\u2022\s*.*$", ""));
+        for (Map.Entry<JPanel, String> entry : legendLabelRefs.entrySet()) {
+            for (java.awt.Component child : entry.getKey().getComponents()) {
+                if (child instanceof JLabel label && label.getName() != null
+                        && !label.getName().isEmpty()) {
+                    label.setText(Messages.get(label.getName()));
+                }
+            }
+        }
+        if (hintLabel != null) {
+            hintLabel.setText(Messages.get("seatMap.hint"));
+        }
+        revalidate();
+        repaint();
     }
 
     void refreshStatuses() {
