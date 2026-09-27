@@ -44,10 +44,12 @@ final class SeatMapPanel extends JPanel {
     private static final Color AVAILABLE_FOREGROUND = new Color(28, 55, 90);
     private static final Color SELECTED_BACKGROUND = new Color(245, 158, 11);
     private static final Color SELECTED_FOREGROUND = new Color(67, 37, 4);
-    private static final Color BOOKED_BACKGROUND = new Color(214, 222, 232);
-    private static final Color BOOKED_FOREGROUND = new Color(119, 132, 148);
+    /** Booked seats read as "already taken": rose fill with a deep rose outline. */
+    private static final Color BOOKED_BACKGROUND = new Color(251, 213, 213);
+    private static final Color BOOKED_FOREGROUND = new Color(159, 18, 57);
     private static final Color CLOSED_BACKGROUND = new Color(239, 229, 218);
     private static final Color CLOSED_FOREGROUND = new Color(146, 104, 62);
+    private static final Color SEAT_OUTLINE = new Color(166, 181, 201);
     private static final Color MAP_BACKGROUND = new Color(248, 251, 255);
     private static final Color MAP_BORDER = new Color(185, 201, 222);
     private static final Color PITCH_GREEN = new Color(222, 242, 231);
@@ -483,7 +485,10 @@ final class SeatMapPanel extends JPanel {
             Rectangle rectangle = new Rectangle(x, y, CELL_WIDTH, CELL_HEIGHT);
             g.setColor(background);
             g.fillRoundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, 4, 4);
-            g.setColor(selected ? SELECTED_FOREGROUND : new Color(166, 181, 201));
+            // Booked seats get a deep rose outline so taken blocks stand out from
+            // vacant seats, which keep the neutral default outline.
+            g.setColor(booked ? BOOKED_FOREGROUND
+                    : selected ? SELECTED_FOREGROUND : SEAT_OUTLINE);
             g.setStroke(new BasicStroke(selected ? 1.5f : 1f));
             g.drawRoundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, 4, 4);
             if (key.getNumber() == 1 || key.getNumber() % 5 == 0 || key.getNumber() == section.getSeatsPerRow()) {
