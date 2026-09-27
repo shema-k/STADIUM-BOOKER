@@ -4,3 +4,11 @@ stadium-bookings.dat
 *.mv.db
 *.trace.db
 *.lock.db
+
+# Venue photographs are supplied by whoever runs the application, and are third-party
+# images, so they are deliberately not committed. See photos/README.md.
+photos/*.jpg
+photos/*.jpeg
+photos/*.png
+photos/*.gif
+photos/*.webp
