@@ -50,6 +50,9 @@ final class SeatMapPanel extends JPanel {
     private static final Color CLOSED_BACKGROUND = new Color(239, 229, 218);
     private static final Color CLOSED_FOREGROUND = new Color(146, 104, 62);
     private static final Color SEAT_OUTLINE = new Color(166, 181, 201);
+    /** Held by another customer: amber outline with a hatched feel. */
+    private static final Color HELD_BACKGROUND = new Color(254, 243, 199);
+    private static final Color HELD_FOREGROUND = new Color(146, 64, 14);
     private static final Color MAP_BACKGROUND = new Color(248, 251, 255);
     private static final Color MAP_BORDER = new Color(185, 201, 222);
     private static final Color PITCH_GREEN = new Color(222, 242, 231);
@@ -62,6 +65,9 @@ final class SeatMapPanel extends JPanel {
     private static final int MAP_TOP = 48;
 
     private final BookingService bookingService;
+    private SeatHoldService holdService;
+    private String holdOwner = "customer";
+    private Set<SeatKey> heldSeats = new LinkedHashSet<>();
     private final Consumer<Seat> seatToggledListener;
     private final Runnable selectionChangedListener;
     private final Consumer<String> messageListener;
@@ -79,6 +85,7 @@ final class SeatMapPanel extends JPanel {
                  Runnable selectionChangedListener,
                  Consumer<String> messageListener) {
         this.bookingService = bookingService;
+        this.holdService = new SeatHoldService(bookingService);
         this.seatToggledListener = seatToggledListener;
         this.selectionChangedListener = selectionChangedListener;
         this.messageListener = messageListener;
@@ -131,6 +138,7 @@ final class SeatMapPanel extends JPanel {
         legend.setOpaque(false);
         legend.add(legendItem("Vacant", AVAILABLE_BACKGROUND, AVAILABLE_FOREGROUND));
         legend.add(legendItem("Selected", SELECTED_BACKGROUND, SELECTED_FOREGROUND));
+        legend.add(legendItem("Held", HELD_BACKGROUND, HELD_FOREGROUND));
         legend.add(legendItem("Booked", BOOKED_BACKGROUND, BOOKED_FOREGROUND));
         legend.add(legendItem("Closed", CLOSED_BACKGROUND, CLOSED_FOREGROUND));
         legend.add(Box.createHorizontalStrut(8));
@@ -175,6 +183,7 @@ final class SeatMapPanel extends JPanel {
         renderedEventId = event.getId();
         bookedSeats.clear();
         bookedSeats.addAll(bookingService.getBookedSeatKeys(event));
+        heldSeats = holdService.allHeldKeys(event);
         int selectedBeforeRefresh = selectedSeats.size();
         selectedSeats.removeAll(bookedSeats);
         boolean removedSelectedSeat = selectedBeforeRefresh != selectedSeats.size();
@@ -225,6 +234,13 @@ final class SeatMapPanel extends JPanel {
             }
             return;
         }
+        if (holdService.isHeldByAnother(key, bookingService.getActiveEvent(), holdOwner)) {
+            if (messageListener != null) {
+                messageListener.accept("Seat " + key.display()
+                        + " is being held by another customer for a few more minutes");
+            }
+            return;
+        }
         toggleSeat(seat);
     }
 
@@ -235,6 +251,7 @@ final class SeatMapPanel extends JPanel {
         }
         if (selectedSeats.contains(key)) {
             selectedSeats.remove(key);
+            holdService.release(key);
             lastSeatValue.setText(key.display() + "  •  Removed  •  " + currency(seat.getPrice()));
         } else {
             if (selectedSeats.size() >= BookingService.MAX_SEATS_PER_BOOKING) {
@@ -244,8 +261,15 @@ final class SeatMapPanel extends JPanel {
                 }
                 return;
             }
+            String refusal = holdService.hold(key, bookingService.getActiveEvent(), holdOwner);
+            if (refusal != null) {
+                if (messageListener != null) {
+                    messageListener.accept(refusal);
+                }
+                return;
+            }
             selectedSeats.add(key);
-            lastSeatValue.setText(key.display() + "  •  Selected  •  " + currency(seat.getPrice()));
+            lastSeatValue.setText(key.display() + "  •  Held for you  •  " + currency(seat.getPrice()));
         }
         for (SeatCanvas canvas : canvases.values()) {
             canvas.repaint();
@@ -269,7 +293,24 @@ final class SeatMapPanel extends JPanel {
         if (status == SeatStatus.BLOCKED) {
             return "Unavailable";
         }
-        return selectedSeats.contains(key) ? "Selected" : "Vacant";
+        if (selectedSeats.contains(key)) {
+            return "Selected";
+        }
+        return heldSeats.contains(key) ? "Held" : "Vacant";
+    }
+
+    /** Who owns the holds placed through this panel, normally one browsing session. */
+    void setHoldOwner(String owner) {
+        this.holdOwner = owner == null ? "customer" : owner;
+    }
+
+    SeatHoldService getHoldService() {
+        return holdService;
+    }
+
+    /** Seconds left on this seat's hold, or 0 when there is none. */
+    long holdSecondsRemaining(SeatKey key) {
+        return holdService.secondsRemaining(key);
     }
 
     List<Seat> getSelectedSeats() {
@@ -288,6 +329,8 @@ final class SeatMapPanel extends JPanel {
             return;
         }
         selectedSeats.clear();
+        holdService.releaseAllFor(holdOwner);
+        heldSeats = holdService.allHeldKeys(bookingService.getActiveEvent());
         lastSeatValue.setText(priceGuide());
         for (SeatCanvas canvas : canvases.values()) {
             canvas.repaint();
@@ -467,9 +510,13 @@ final class SeatMapPanel extends JPanel {
         private void paintSeat(Graphics2D g, SeatKey key, int x, int y, boolean closed) {
             boolean booked = bookedSeats.contains(key);
             boolean selected = selectedSeats.contains(key);
+            boolean held = heldSeats.contains(key) && !selected;
             Color background;
             Color foreground;
-            if (booked) {
+            if (held) {
+                background = HELD_BACKGROUND;
+                foreground = HELD_FOREGROUND;
+            } else if (booked) {
                 background = BOOKED_BACKGROUND;
                 foreground = BOOKED_FOREGROUND;
             } else if (selected) {

@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -47,6 +48,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -153,13 +155,17 @@ public final class StadiumBookingApp extends JFrame {
     private JLabel ledgerSummaryLabel;
     private JLabel ledgerSectionLabel;
     private String currentScreen = "directory";
+    private StaffSession staffSession;
+    private final String sessionOwner = UUID.randomUUID().toString();
+    private JLabel holdCountdownValue;
     private String ledgerReturnScreen = "directory";
     private final Timer directorySearchTimer = new Timer(140, event -> {
         if ("directory".equals(currentScreen)) {
             refreshDirectoryContent();
         }
     });
-    private final Timer countdownTimer = new Timer(60_000, event -> updateCountdownDisplays());
+    /** Ticks once a second to keep countdowns and seat holds current. */
+    private final Timer countdownTimer;
     private final Timer liveSearchTimer = new Timer(200, event -> {
         if ("schedules".equals(currentScreen)) {
             refreshLiveSchedules();
@@ -169,11 +175,15 @@ public final class StadiumBookingApp extends JFrame {
     public StadiumBookingApp() {
         super("Stadium Select");
         directorySearchTimer.setRepeats(false);
-        countdownTimer.setRepeats(true);
         liveSearchTimer.setRepeats(false);
         bookingService = new BookingService();
+        // A staff PIN protects the screens that show customer contact details.
+        // The default is shown on first run so the application is usable out of
+        // the box; change it in StaffSession for a real deployment.
+        staffSession = new StaffSession("1234");
         seatMapPanel = new SeatMapPanel(bookingService, this::onSeatToggled,
                 this::updateBookingSummary, this::showStatus);
+        seatMapPanel.setHoldOwner(sessionOwner);
         bookingTableModel = new DefaultTableModel(
                 new Object[]{"Reference", "Stadium", "Event", "When", "Seats", "Total", "Status"}, 0) {
             @Override
@@ -196,6 +206,14 @@ public final class StadiumBookingApp extends JFrame {
                 }
             }
         });
+
+        countdownTimer = new Timer(1_000, event -> {
+            updateCountdownDisplays();
+            seatMapPanel.getHoldService().purgeExpired();
+            seatMapPanel.refreshStatuses();
+            updateHoldCountdown();
+        });
+        countdownTimer.setRepeats(true);
 
         configureWindow();
         installSearchListeners();
@@ -1069,6 +1087,27 @@ public final class StadiumBookingApp extends JFrame {
         return event.isGame() ? "Choose game" : "Choose concert";
     }
 
+    /** Shows how long the customer's held seats stay reserved for them. */
+    private void updateHoldCountdown() {
+        if (holdCountdownValue == null) {
+            return;
+        }
+        List<Seat> selected = seatMapPanel.getSelectedSeats();
+        if (selected.isEmpty()) {
+            holdCountdownValue.setText("—");
+            return;
+        }
+        long seconds = 0;
+        for (Seat seat : selected) {
+            seconds = Math.max(seconds, seatMapPanel.holdSecondsRemaining(seat.getKey()));
+        }
+        long minutes = seconds / 60;
+        long remainder = seconds % 60;
+        holdCountdownValue.setText(String.format(Locale.US, "%d:%02d", minutes, remainder));
+        holdCountdownValue.setForeground(seconds < 60
+                ? new Color(253, 186, 116) : new Color(253, 230, 138));
+    }
+
     private void updateCountdownDisplays() {
         for (Map.Entry<JLabel, StadiumEvent> entry : countdownLabels.entrySet()) {
             StadiumEvent event = entry.getValue();
@@ -1729,11 +1768,34 @@ public final class StadiumBookingApp extends JFrame {
         availabilityConstraints.insets = new Insets(4, 0, 0, 0);
         availability.add(bookingAvailabilityValue, availabilityConstraints);
 
+        JPanel holds = new JPanel(new GridBagLayout());
+        holds.setOpaque(false);
+        holds.setPreferredSize(new Dimension(150, 52));
+        GridBagConstraints holdConstraints = new GridBagConstraints();
+        holdConstraints.anchor = GridBagConstraints.EAST;
+        JLabel holdHeading = new JLabel("SEATS HELD");
+        holdHeading.setForeground(new Color(170, 195, 229));
+        holdHeading.setFont(holdHeading.getFont().deriveFont(Font.BOLD, 10f));
+        holds.add(holdHeading, holdConstraints);
+        holdCountdownValue = new JLabel("—");
+        holdCountdownValue.setForeground(new Color(253, 230, 138));
+        holdCountdownValue.setFont(holdCountdownValue.getFont().deriveFont(Font.BOLD, 16f));
+        holdConstraints.gridy = 1;
+        holdConstraints.insets = new Insets(4, 0, 0, 0);
+        holds.add(holdCountdownValue, holdConstraints);
+
+        JPanel rightSide = new JPanel(new GridBagLayout());
+        rightSide.setOpaque(false);
+        GridBagConstraints rightConstraints = new GridBagConstraints();
+        rightSide.add(availability, rightConstraints);
+        rightConstraints.gridx = 1;
+        rightSide.add(holds, rightConstraints);
+
         JPanel middle = new JPanel(new BorderLayout(15, 0));
         middle.setOpaque(false);
         middle.add(selection, BorderLayout.WEST);
         middle.add(total, BorderLayout.CENTER);
-        middle.add(availability, BorderLayout.EAST);
+        middle.add(rightSide, BorderLayout.EAST);
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 3));
         actions.setOpaque(false);
@@ -1825,6 +1887,7 @@ public final class StadiumBookingApp extends JFrame {
         }
         refreshPricingBreakdown();
         updateCountdownDisplays();
+        updateHoldCountdown();
     }
 
     private void clearSelection() {
@@ -1862,6 +1925,7 @@ public final class StadiumBookingApp extends JFrame {
         try {
             Booking booking = bookingService.book(nameField.getText(), emailField.getText(),
                     phoneField.getText(), spreadSeats);
+            seatMapPanel.getHoldService().releaseAllFor(sessionOwner);
             seatMapPanel.clearSelection();
             seatMapPanel.refreshStatuses();
             clearContactFields();
@@ -1927,6 +1991,10 @@ public final class StadiumBookingApp extends JFrame {
     // ---------------------------------------------------------------------
 
     private void showBookings() {
+        if (!promptForSignIn()) {
+            showStatus("Sign in to view bookings");
+            return;
+        }
         currentScreen = "directory";
         bookingSearchField.setText("");
         currentScreen = "bookings";
@@ -2157,9 +2225,8 @@ public final class StadiumBookingApp extends JFrame {
                 : event.getBookingDeadlineLabel());
 
         addDetailSection(content, "BOOKED BY");
-        addDetailRow(content, "Full name", booking.getCustomerName());
-        addDetailRow(content, "Email", booking.getEmail());
-        addDetailRow(content, "Phone", booking.getPhone());
+        addDetailRow(content, "Full name", maskedName(booking));
+        addDetailRow(content, "Contact", maskedContact(booking));
 
         addDetailSection(content, "SEATS AND PAYMENT");
         addDetailRow(content, "Booked seats", booking.getSeatDisplay());
@@ -2249,6 +2316,10 @@ public final class StadiumBookingApp extends JFrame {
      * can see the occupancy of the venue they are booking on.
      */
     private void showSeatLedger() {
+        if (!promptForSignIn()) {
+            showStatus("Sign in to view booked seats");
+            return;
+        }
         Stadium target = selectedStadium != null ? selectedStadium : StadiumData.getStadium("namboole");
         StadiumEvent targetEvent = selectedEvent != null && target != null
                 && target.getId().equals(selectedEvent.getStadiumId())
@@ -2523,7 +2594,7 @@ public final class StadiumBookingApp extends JFrame {
                             section == null ? 1 : section.getRows()),
                     currency(bookingService.getSeatPrice(event, key)),
                     booking == null ? "—" : booking.getReference(),
-                    booking == null ? "—" : booking.getCustomerName(),
+                    maskedName(booking),
                     booking == null ? "—" : formatStamp(booking.getCreatedAt())
             });
         }
@@ -2852,6 +2923,76 @@ public final class StadiumBookingApp extends JFrame {
 
     private void showStatus(String message) {
         statusValue.setText(message == null || message.trim().isEmpty() ? "Ready" : message);
+    }
+
+    /**
+     * Customer names are only shown in full to signed-in staff. Everyone else sees
+     * a partial name so the bookings screen is still useful without exposing
+     * contact details.
+     */
+    private String maskedName(Booking booking) {
+        if (booking == null) {
+            return "—";
+        }
+        if (StaffSession.canViewCustomerDetails(staffSession.isSignedIn())) {
+            return booking.getCustomerName();
+        }
+        String name = booking.getCustomerName() == null ? "" : booking.getCustomerName().trim();
+        if (name.isEmpty()) {
+            return "—";
+        }
+        String[] parts = name.split("\\s+");
+        String first = parts[0];
+        String initial = parts.length > 1 ? " " + parts[parts.length - 1].charAt(0) + "." : "";
+        return first + initial;
+    }
+
+    private String maskedContact(Booking booking) {
+        if (booking == null) {
+            return "—";
+        }
+        if (StaffSession.canViewCustomerDetails(staffSession.isSignedIn())) {
+            return booking.getEmail() + "  •  " + booking.getPhone();
+        }
+        return "Sign in as staff to view contact details";
+    }
+
+    /**
+     * Asks for the staff PIN. Returns true when signed in; false means the user
+     * chose to skip, which leaves the management screens closed.
+     */
+    private boolean promptForSignIn() {
+        if (staffSession.isSignedIn()) {
+            return true;
+        }
+        JPasswordField pin = new JPasswordField(10);
+        pin.setFont(pin.getFont().deriveFont(Font.PLAIN, 13f));
+        JPanel form = new JPanel(new BorderLayout(8, 6));
+        form.add(new JLabel("Staff PIN"), BorderLayout.NORTH);
+        form.add(pin, BorderLayout.CENTER);
+        JLabel hint = new JLabel("Default PIN is 1234. Contact details stay hidden until you sign in.");
+        hint.setForeground(MUTED);
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
+        form.add(hint, BorderLayout.SOUTH);
+
+        while (true) {
+            String choice = showDialogChoice(this, form, "Staff sign-in",
+                    JOptionPane.PLAIN_MESSAGE, "Sign in", "Sign in", "Continue without signing in");
+            if (!"Sign in".equals(choice)) {
+                return false;
+            }
+            String refusal = staffSession.signIn(new String(pin.getPassword()));
+            pin.setText("");
+            if (refusal == null) {
+                showStatus("Signed in as staff");
+                return true;
+            }
+            showWarning(refusal + (staffSession.isLockedOut()
+                    ? " Too many attempts. Close and reopen the application." : ""));
+            if (staffSession.isLockedOut()) {
+                return false;
+            }
+        }
     }
 
     private void showWarning(String message) {
