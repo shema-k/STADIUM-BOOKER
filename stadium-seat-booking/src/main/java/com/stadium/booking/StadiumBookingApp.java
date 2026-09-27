@@ -42,6 +42,7 @@ import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -313,6 +314,11 @@ public final class StadiumBookingApp extends JFrame {
         stadiumNavButton.addActionListener(event -> showStadiumDirectory());
         bookingsNavButton.addActionListener(event -> showBookings());
         seatLedgerNavButton.addActionListener(event -> showSeatLedger());
+        describe(backNavButton, "Back", "Return to the previous screen");
+        describe(stadiumNavButton, "Venues", "Show every stadium and concert venue");
+        describe(bookingsNavButton, "My bookings", "Sign in and review your reservations");
+        describe(seatLedgerNavButton, "Booked seats",
+                "Sign in and see which seats are already taken at each venue and event");
         navigation.add(backNavButton);
         navigation.add(stadiumNavButton);
         navigation.add(bookingsNavButton);
@@ -1632,6 +1638,7 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private void addField(JPanel parent, int column, String labelText, JTextField field) {
+        describe(field, labelText, describeField(labelText));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.gridx = column;
         constraints.gridy = 0;
@@ -1932,16 +1939,7 @@ public final class StadiumBookingApp extends JFrame {
             updateBookingSummary();
             showStatus("Seat" + (booking.getSeats().size() == 1 ? "" : "s") + " booked: "
                     + booking.getSeatDisplay());
-            showDialogChoice(this,
-                    "Your seat booking is confirmed.\n\n"
-                            + "Booked seat" + (booking.getSeats().size() == 1 ? "" : "s") + ": "
-                            + booking.getSeatDisplay() + "\n"
-                            + "Reference: " + booking.getReference() + "\n"
-                            + "Event: " + booking.getEvent() + "\n"
-                            + "Booked before: " + selectedEvent.getBookingDeadlineLabel() + "\n"
-                            + "Total: " + currency(booking.getTotal()),
-                    "Booking confirmed", JOptionPane.INFORMATION_MESSAGE, BACK_LABEL, BACK_LABEL);
-            refreshBookings();
+            settleAndIssueTicket(booking, selectedEvent);
         } catch (IllegalArgumentException exception) {
             showWarning(exception.getMessage());
         }
@@ -1978,6 +1976,123 @@ public final class StadiumBookingApp extends JFrame {
             first = false;
         }
         return text.toString();
+    }
+
+    /**
+     * Asks how the booking will be paid for, then settles it and shows the ticket.
+     * Cash at the venue needs nothing extra; mobile money is clearly marked as a
+     * simulation because no provider credentials ship with this build.
+     */
+    private void settleAndIssueTicket(Booking booking, StadiumEvent event) {
+        JComboBox<PaymentRecord.Method> methods =
+                new JComboBox<>(PaymentRecord.Method.values());
+        methods.setSelectedItem(PaymentRecord.Method.CASH_AT_VENUE);
+        JPanel form = new JPanel(new BorderLayout(0, 8));
+        form.add(new JLabel("How would you like to pay?"), BorderLayout.NORTH);
+        form.add(methods, BorderLayout.CENTER);
+        JLabel note = new JLabel("Total due: " + currency(booking.getTotal())
+                + (PaymentRecord.isRealProviderConfigured()
+                ? "" : "  •  mobile money is simulated, no money moves"));
+        note.setForeground(MUTED);
+        note.setFont(note.getFont().deriveFont(Font.PLAIN, 10f));
+        form.add(note, BorderLayout.SOUTH);
+
+        String choice = showDialogChoice(this, form, "Payment",
+                JOptionPane.PLAIN_MESSAGE, "Pay", "Pay", BACK_LABEL);
+        if (!"Pay".equals(choice)) {
+            return;
+        }
+        PaymentRecord.Method method = (PaymentRecord.Method) methods.getSelectedItem();
+        PaymentRecord payment = method == PaymentRecord.Method.MOBILE_MONEY
+                ? PaymentRecord.simulatedMobileMoney(booking.getTotal(), phoneField.getText())
+                : PaymentRecord.cashAtVenue(booking.getTotal());
+
+        showStatus("Booking " + booking.getReference() + " • " + payment.describe());
+        showBookingTicket(booking, event, payment);
+        refreshBookings();
+    }
+
+    private void showBookingTicket(Booking booking, StadiumEvent event, PaymentRecord payment) {
+        Stadium stadium = StadiumData.getStadium(booking.getStadiumId());
+        JTextArea ticket = new JTextArea(
+                TicketBuilder.text(booking, stadium, event) + "\n  Payment: " + payment.describe() + "\n",
+                24, 58);
+        ticket.setEditable(false);
+        ticket.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+        ticket.setCaretPosition(0);
+        ticket.setBackground(new Color(250, 252, 255));
+
+        String choice = showDialogChoice(this, new JScrollPane(ticket),
+                "Ticket " + booking.getReference(), JOptionPane.INFORMATION_MESSAGE,
+                "Save as text", "Save as text", "Print", BACK_LABEL);
+        if ("Save as text".equals(choice)) {
+            saveTicketToFile(booking, ticket.getText());
+        } else if ("Print".equals(choice)) {
+            printTicket(booking, ticket.getText());
+        }
+    }
+
+    private void saveTicketToFile(Booking booking, String contents) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("ticket-" + booking.getReference() + ".txt"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            java.nio.file.Files.writeString(chooser.getSelectedFile().toPath(), contents);
+            showStatus("Ticket saved to " + chooser.getSelectedFile().getName());
+        } catch (java.io.IOException exception) {
+            showWarning("The ticket could not be saved: " + exception.getMessage());
+        }
+    }
+
+    private void printTicket(Booking booking, String contents) {
+        java.awt.print.PrinterJob job = java.awt.print.PrinterJob.getPrinterJob();
+        job.setJobName("Ticket " + booking.getReference());
+        job.setPrintable(new java.awt.print.Printable() {
+            @Override
+            public int print(java.awt.Graphics graphics, java.awt.print.PageFormat format,
+                             int pageIndex) {
+                if (pageIndex > 0) {
+                    return NO_SUCH_PAGE;
+                }
+                Graphics2D copy = (Graphics2D) graphics;
+                copy.translate(format.getImageableX(), format.getImageableY());
+                java.util.List<String> lines = java.util.Arrays.asList(contents.split("\n"));
+                java.awt.FontMetrics metrics = copy.getFontMetrics();
+                int y = 0;
+                for (String line : lines) {
+                    copy.drawString(line, 0, y);
+                    y += metrics.getHeight();
+                }
+                return PAGE_EXISTS;
+            }
+        });
+        if (job.printDialog()) {
+            showStatus("Ticket sent to the printer");
+        }
+    }
+
+    /** Writes every booking to a CSV file the user chooses. */
+    private void exportBookingsToCsv() {
+        List<Booking> bookings = bookingService.getBookings();
+        if (bookings.isEmpty()) {
+            showWarning("There are no bookings to export yet.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("bookings.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            java.nio.file.Files.writeString(chooser.getSelectedFile().toPath(),
+                    TicketBuilder.csv(bookings));
+            showStatus("Exported " + bookings.size() + " bookings to "
+                    + chooser.getSelectedFile().getName());
+        } catch (java.io.IOException exception) {
+            showWarning("The export could not be written: " + exception.getMessage());
+        }
     }
 
     private void clearContactFields() {
@@ -2087,9 +2202,13 @@ public final class StadiumBookingApp extends JFrame {
         bottom.setOpaque(false);
         JButton refresh = createSecondaryButton("Refresh");
         refresh.addActionListener(event -> refreshBookings());
+        JButton export = createSecondaryButton("Export CSV");
+        export.setToolTipText("Write every booking to a spreadsheet file");
+        export.addActionListener(event -> exportBookingsToCsv());
         cancelBookingButton = createSecondaryButton("Cancel selected booking", new Color(185, 28, 28));
         cancelBookingButton.addActionListener(event -> cancelSelectedBooking());
         bottom.add(refresh);
+        bottom.add(export);
         bottom.add(cancelBookingButton);
         page.add(bottom, BorderLayout.SOUTH);
         return page;
@@ -2639,6 +2758,7 @@ public final class StadiumBookingApp extends JFrame {
 
     private JPanel buildSearchBar(JTextField field, String hint) {
         styleSearchField(field);
+        describe(field, "Search", "Type to search. Use the arrow keys and Enter to choose a suggestion.");
         if (field instanceof SearchField) {
             ((SearchField) field).setHint(hint);
         }
@@ -2662,6 +2782,27 @@ public final class StadiumBookingApp extends JFrame {
         field.setBackground(WHITE);
         field.setCaretColor(BLUE);
         field.setPreferredSize(new Dimension(220, 30));
+    }
+
+    private String describeField(String labelText) {
+        switch (labelText) {
+            case "Name":
+                return "Full name of the person booking, at least two characters";
+            case "Email":
+                return "Email address used for the booking";
+            case "Phone":
+                return "Phone number, digits, spaces and an optional leading plus";
+            default:
+                return null;
+        }
+    }
+
+    /** Gives a field a label a screen reader can announce. */
+    private void describe(JComponent component, String name, String description) {
+        component.getAccessibleContext().setAccessibleName(name);
+        if (description != null) {
+            component.getAccessibleContext().setAccessibleDescription(description);
+        }
     }
 
     private void styleTextField(JTextField field) {

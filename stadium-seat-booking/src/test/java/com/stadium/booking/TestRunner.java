@@ -95,6 +95,7 @@ public final class TestRunner {
         SeatAllocationTest.register();
         SeatLedgerTest.register();
         SearchAndFilterTest.register();
+        BookingToolsTest.register();
         System.exit(summary());
     }
 }

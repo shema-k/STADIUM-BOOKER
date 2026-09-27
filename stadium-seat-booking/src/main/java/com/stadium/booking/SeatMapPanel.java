@@ -31,7 +31,9 @@ import javax.swing.Box;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.AbstractAction;
 import javax.swing.JTabbedPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 
 /**
@@ -77,6 +79,8 @@ final class SeatMapPanel extends JPanel {
     private final JTabbedPane sectionTabs = new JTabbedPane();
     private final JLabel vacancyValue = new JLabel();
     private final JLabel lastSeatValue = new JLabel("Prices fall from front to back");
+    private int keyboardRow = 1;
+    private int keyboardNumber = 1;
     private String renderedStadiumId;
     private String renderedEventId;
 
@@ -111,7 +115,7 @@ final class SeatMapPanel extends JPanel {
         title.setForeground(new Color(30, 64, 110));
         title.setFont(title.getFont().deriveFont(Font.BOLD, 11f));
         copy.add(title, constraints);
-        JLabel hint = new JLabel("Front rows are premium • tap a seat to see its number and price");
+        JLabel hint = new JLabel("Front rows are premium • tap a seat, or use the arrow keys");
         hint.setForeground(new Color(100, 116, 139));
         hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
         constraints.gridy = 1;
@@ -130,7 +134,113 @@ final class SeatMapPanel extends JPanel {
         sectionTabs.setFont(sectionTabs.getFont().deriveFont(Font.BOLD, 11f));
         sectionTabs.setBackground(MAP_BACKGROUND);
         sectionTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        sectionTabs.getAccessibleContext().setAccessibleName("Seat sections");
+        sectionTabs.getAccessibleContext().setAccessibleDescription(
+                "Four seating sections. Use the arrow keys to move between seats "
+                        + "and Enter to hold one.");
+        sectionTabs.setFocusTraversalKeysEnabled(false);
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("UP"), "stadium.seat.up");
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("DOWN"), "stadium.seat.down");
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("LEFT"), "stadium.seat.left");
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("RIGHT"), "stadium.seat.right");
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("ENTER"), "stadium.seat.hold");
+        sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke("SPACE"), "stadium.seat.hold");
+        sectionTabs.getActionMap().put("stadium.seat.up",
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent event) {
+                        moveKeyboardCaret(-1, 0);
+                    }
+                });
+        sectionTabs.getActionMap().put("stadium.seat.down",
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent event) {
+                        moveKeyboardCaret(1, 0);
+                    }
+                });
+        sectionTabs.getActionMap().put("stadium.seat.left",
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent event) {
+                        moveKeyboardCaret(0, -1);
+                    }
+                });
+        sectionTabs.getActionMap().put("stadium.seat.right",
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent event) {
+                        moveKeyboardCaret(0, 1);
+                    }
+                });
+        sectionTabs.getActionMap().put("stadium.seat.hold",
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(java.awt.event.ActionEvent event) {
+                        toggleKeyboardSeat();
+                    }
+                });
         return sectionTabs;
+    }
+
+    /**
+     * Moves the keyboard caret around the seat grid. Arrow keys walk the seats,
+     * Enter or Space holds the seat, so booking works without a mouse.
+     */
+    private void moveKeyboardCaret(int rowDelta, int numberDelta) {
+        SeatSection section = currentSection();
+        if (section == null) {
+            return;
+        }
+        keyboardRow = Math.max(1, Math.min(section.getRows(), keyboardRow + rowDelta));
+        keyboardNumber = Math.max(1, Math.min(section.getSeatsPerRow(), keyboardNumber + numberDelta));
+        announceKeyboardSeat(section);
+        repaint();
+    }
+
+    private void announceKeyboardSeat(SeatSection section) {
+        SeatKey key = new SeatKey(section.getId(), keyboardRow, keyboardNumber);
+        Seat seat = bookingService.getSeat(key);
+        if (seat == null) {
+            return;
+        }
+        String state = bookingService.isBooked(key) ? "booked"
+                : selectedSeats.contains(key) ? "selected" : "vacant";
+        String text = String.format(Locale.US,
+                "Section %s %s, row %d, seat %d, %s, %s",
+                section.getId(), section.getLabel(), keyboardRow, keyboardNumber, state,
+                currency(seat.getPrice()));
+        lastSeatValue.setText(text);
+        if (messageListener != null) {
+            messageListener.accept(text);
+        }
+    }
+
+    private void toggleKeyboardSeat() {
+        SeatSection section = currentSection();
+        if (section == null) {
+            return;
+        }
+        SeatKey key = new SeatKey(section.getId(), keyboardRow, keyboardNumber);
+        Seat seat = bookingService.getSeat(key);
+        if (seat != null) {
+            handleSeatClick(seat);
+        }
+    }
+
+    private SeatSection currentSection() {
+        Stadium stadium = bookingService.getActiveStadium();
+        int index = sectionTabs.getSelectedIndex();
+        if (stadium == null || index < 0 || index >= stadium.getSections().size()) {
+            return null;
+        }
+        return stadium.getSections().get(index);
     }
 
     private JPanel buildLegend() {
