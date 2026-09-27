@@ -58,6 +58,8 @@ A professional desktop stadium directory and seat-booking application built with
   and a per-section breakdown, with rows that sum to the totals
 - Keyboard seat selection: the arrow keys walk the grid and Enter or Space holds a seat,
   so booking works without a mouse
+- The keyboard caret is drawn as a dashed ring on the seat it is on, and clicking a seat
+  moves the caret there so arrowing on continues from the pointer
 - Accessible names and descriptions on the search fields, customer fields and navigation
 - Interface available in English, Luganda and Swahili, switchable from the header
 - Staff PIN gates the screens that show customer contact details
@@ -79,11 +81,15 @@ A professional desktop stadium directory and seat-booking application built with
 ./run-tests.sh
 ```
 
-Seventy-two tests covering the venue and event data, pricing and booking rules, database
+Eighty-four tests covering the venue and event data, pricing and booking rules, database
 persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
-the three languages and the occupancy report. The runner needs nothing but a JDK, so no
-build tool or network access is required. Two of them are regression tests for the defect
-where a confirmed booking could be silently destroyed when two people saved at once.
+the three languages, the occupancy report and keyboard seat selection. The runner needs
+nothing but a JDK, so no build tool or network access is required.
+
+Two of them are regression tests for the defect where a confirmed booking could be
+silently destroyed when two people saved at once, and twelve drive the seat-map key
+actions directly, because clicking through a headless display is not a reliable way to
+test keyboard behaviour.
 
 ## Included sample data
 
