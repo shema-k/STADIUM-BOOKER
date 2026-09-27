@@ -1,6 +1,7 @@
 package com.stadium.booking;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -170,11 +171,13 @@ public class BookingService {
             chosen.put(section.getId(), new ArrayList<>());
         }
         // Keep the customer's own picks first, within the per-section targets.
+        // A pick can go stale between choosing and confirming, for example when
+        // somebody else takes the seat in between, so availability is rechecked.
         for (Seat seat : requested) {
             String sectionId = seat.getKey().getSection();
             List<Seat> bucket = chosen.get(sectionId);
             int target = targets.getOrDefault(sectionId, 0);
-            if (bucket != null && bucket.size() < target) {
+            if (bucket != null && bucket.size() < target && isSeatSelectable(seat.getKey())) {
                 bucket.add(seat);
             }
         }
@@ -285,6 +288,28 @@ public class BookingService {
      */
     private double roundMoney(double value) {
         return Math.round(value / 500.0) * 500.0;
+    }
+
+    /**
+     * A reference that is unique across the whole database, so two people booking
+     * at the same time never collide. Falls back to the in-memory counter when the
+     * application runs without a store.
+     */
+    private String nextReference() {
+        if (store != null) {
+            try {
+                String reference = store.allocateReference();
+                while (reference.startsWith("ST-")
+                        && reference.substring(3).matches("\\d+")
+                        && Integer.parseInt(reference.substring(3)) >= nextReferenceNumber) {
+                    nextReferenceNumber = Integer.parseInt(reference.substring(3)) + 1;
+                }
+                return reference;
+            } catch (IOException exception) {
+                // Fall through to the counter so booking can still be attempted.
+            }
+        }
+        return "ST-" + nextReferenceNumber++;
     }
 
     private void updateNextReferenceNumber() {
@@ -678,13 +703,29 @@ public class BookingService {
         double total = getTotalCharge(keys.stream()
                 .map(seatInventory::get)
                 .collect(Collectors.toList()));
-        String reference = "ST-" + nextReferenceNumber;
-        nextReferenceNumber++;
+        String reference = nextReference();
         Booking booking = new Booking(reference, activeEvent.getStadiumId(), activeEvent.getId(),
                 activeEvent.getHeadline(), normalizedName, normalizedEmail, normalizedPhone,
                 keys, total, Instant.now(), activeEvent.getDate(), activeEvent.getStartTime());
         bookings.add(booking);
-        persist();
+        if (store != null) {
+            try {
+                store.save(booking);
+            } catch (IOException | RuntimeException exception) {
+                // The reservation never happened, so it must not linger in memory
+                // and must never be reported to the customer as confirmed.
+                bookings.remove(booking);
+                updateNextReferenceNumber();
+                if (exception instanceof BookingStore.SeatAlreadyBookedException) {
+                    throw new IllegalArgumentException(
+                            "One of those seats has just been booked by someone else. "
+                                    + "Please pick again.");
+                }
+                throw new IllegalStateException(
+                        "The booking could not be saved, so it has been cancelled. "
+                                + "Please try again.", exception);
+            }
+        }
         return booking;
     }
 
@@ -696,21 +737,21 @@ public class BookingService {
         for (Booking booking : bookings) {
             if (booking.getReference().equals(reference) && booking.isConfirmed()) {
                 booking.cancel();
-                persist();
+                if (store != null) {
+                    try {
+                        // Saving the cancelled row also releases its seat rows, so the
+                        // seats return to the pool for everyone.
+                        store.save(booking);
+                    } catch (IOException | RuntimeException exception) {
+                        booking.restoreConfirmed();
+                        throw new IllegalStateException(
+                                "The cancellation could not be saved. Please try again.", exception);
+                    }
+                }
                 return true;
             }
         }
         return false;
     }
 
-    private void persist() {
-        if (store == null) {
-            return;
-        }
-        try {
-            store.write(bookings);
-        } catch (Exception ignored) {
-            // The in-memory reservation remains usable if the data file is locked.
-        }
-    }
 }

@@ -145,6 +145,11 @@ public final class Booking implements Serializable {
         return status == BookingStatus.CONFIRMED;
     }
 
+    /** Undoes a cancel whose database save failed, so the booking stays confirmed. */
+    public void restoreConfirmed() {
+        status = BookingStatus.CONFIRMED;
+    }
+
     public void cancel() {
         status = BookingStatus.CANCELLED;
     }
