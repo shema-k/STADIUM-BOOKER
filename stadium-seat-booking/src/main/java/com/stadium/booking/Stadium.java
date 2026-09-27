@@ -171,11 +171,20 @@ public final class Stadium {
     }
 
     public String initials() {
-        String[] words = name.trim().split("\\s+");
-        if (words.length == 1) {
-            return words[0].substring(0, Math.min(2, words[0].length())).toUpperCase(Locale.ENGLISH);
+        // Ignore punctuation so names such as "Hamz Stadium (Nakivubo)" still
+        // produce a readable two-letter badge.
+        List<String> words = java.util.Arrays.stream(name.trim().split("\\s+"))
+                .map(word -> word.replaceAll("[^\\p{L}\\p{N}]", ""))
+                .filter(word -> !word.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+        if (words.isEmpty()) {
+            return "UG";
         }
-        return (words[0].substring(0, 1) + words[words.length - 1].substring(0, 1))
+        if (words.size() == 1) {
+            String only = words.get(0);
+            return only.substring(0, Math.min(2, only.length())).toUpperCase(Locale.ENGLISH);
+        }
+        return (words.get(0).substring(0, 1) + words.get(words.size() - 1).substring(0, 1))
                 .toUpperCase(Locale.ENGLISH);
     }
 }

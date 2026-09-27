@@ -21,7 +21,8 @@ import java.util.stream.Collectors;
 @SuppressWarnings("this-escape")
 public class BookingService {
     public static final int MAX_SEATS_PER_BOOKING = 6;
-    public static final double BOOKING_FEE = 2.50;
+    /** Ticketing fee charged once per reservation, in Ugandan shillings. */
+    public static final double BOOKING_FEE = 15000.0;
 
     private final Map<SeatKey, Seat> seatInventory = new LinkedHashMap<>();
     private final List<Booking> bookings = new ArrayList<>();
@@ -117,8 +118,12 @@ public class BookingService {
         return 0.70;
     }
 
+    /**
+     * Rounds a charge to the nearest 500 shillings, which is how Ugandan
+     * ticketing prices are normally rounded for cash sales.
+     */
     private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
+        return Math.round(value / 500.0) * 500.0;
     }
 
     private void updateNextReferenceNumber() {
@@ -413,6 +418,16 @@ public class BookingService {
 
     public double getBookingFee() {
         return BOOKING_FEE;
+    }
+
+    /**
+     * Formats an amount as Ugandan shillings, for example {@code UGX 89,500}.
+     * Shared by every screen that shows a price so the format cannot drift.
+     */
+    public static String formatMoney(double amount) {
+        return "UGX " + java.text.NumberFormat
+                .getIntegerInstance(Locale.US)
+                .format(Math.round(amount));
     }
 
     public double getTotalCharge(List<Seat> selectedSeats) {

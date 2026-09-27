@@ -16,6 +16,14 @@ import java.util.stream.Collectors;
  * relative to the current day so the directory always has upcoming events.
  */
 public final class StadiumData {
+    /**
+     * Labels for the four independent seating sections (A to D). Section A is the
+     * premium stand, and prices fall through to section D at the back. Declared
+     * before the lists below because static initialisers run in declaration order.
+     */
+    private static final String[] SECTION_LABELS = {
+            "VIP Box", "Main Stand", "Terrace", "Kampala End"};
+
     private static final LocalDate TODAY = LocalDate.now();
     private static final List<Stadium> STADIUMS = createStadiums();
     private static final List<StadiumEvent> EVENTS = createEvents();
@@ -78,344 +86,341 @@ public final class StadiumData {
     private static List<Stadium> createStadiums() {
         List<Stadium> stadiums = new ArrayList<>();
         stadiums.add(new Stadium(
-                "grand-arena",
-                "Grand Arena",
-                "New York",
-                "United States",
-                "Box-shaped multi-purpose arena",
-                "A landmark indoor venue for championship basketball, concerts and live entertainment.",
-                "100 West 33rd Street, New York",
-                24000,
-                "#2563eb",
-                StadiumShape.BOX,
-                sections("North end", "East side", "South end", "West side", 100, 60,
-                        52, 44, 34, 38)));
-        stadiums.add(new Stadium(
-                "riverside-stadium",
-                "Riverside Stadium",
-                "Manchester",
-                "United Kingdom",
-                "Oval football stadium",
-                "A dramatic football home where every match is treated as a full stadium experience.",
-                "Riverside Way, Manchester",
-                32000,
-                "#0f766e",
-                StadiumShape.OVAL,
-                sections("North end", "East side", "South end", "West side", 100, 80,
-                        48, 40, 30, 34)));
-        stadiums.add(new Stadium(
-                "pacific-dome",
-                "Pacific Dome",
-                "Los Angeles",
-                "United States",
-                "Circular indoor arena",
-                "An intimate modern dome for high-energy basketball, hockey and headline concerts.",
-                "700 Figueroa Street, Los Angeles",
-                21600,
-                "#7c3aed",
-                StadiumShape.CIRCULAR,
-                sections("North end", "East side", "South end", "West side", 60, 90,
-                        58, 48, 36, 42)));
-        stadiums.add(new Stadium(
-                "metro-dome",
-                "Metro Dome",
-                "Chicago",
-                "United States",
-                "Circular multi-purpose dome",
-                "A spectacular downtown dome built for championship basketball, hockey and large-scale concerts.",
-                "333 West Madison Street, Chicago",
-                28000,
-                "#0891b2",
-                StadiumShape.CIRCULAR,
-                sections("North end", "East side", "South end", "West side", 100, 70,
-                        50, 42, 32, 36)));
-        stadiums.add(new Stadium(
-                "harbor-arena",
-                "Harbor Arena",
-                "Seattle",
-                "United States",
-                "Oval waterfront arena",
-                "A bright waterfront venue with a steep bowl, premium basketball seats and waterfront concert nights.",
-                "1200 Harbor Avenue, Seattle",
-                22400,
-                "#0f766e",
-                StadiumShape.OVAL,
-                sections("North end", "East side", "South end", "West side", 80, 70,
-                        46, 38, 30, 34)));
-        stadiums.add(new Stadium(
-                "crown-park",
-                "Crown Park",
-                "Toronto",
-                "Canada",
-                "Box-shaped football and concerts stadium",
-                "A four-sided urban stadium hosting international football, club matches and major live shows.",
-                "85 King Street West, Toronto",
-                32000,
+                "namboole",
+                "Mandela National Stadium (Namboole)",
+                "Kampala",
+                "Uganda",
+                "National multi-purpose stadium",
+                "Uganda's flagship arena on Namboole Hill, opened in 1997 with Chinese government "
+                        + "funding. Home of the Cranes national team and a regular host of Uganda "
+                        + "Premier League derbies, CHAN matches and major concerts.",
+                "Namboole Hill, Kira Municipality, Wakiso District",
+                45202,
                 "#dc2626",
-                StadiumShape.BOX,
-                sections("North end", "East side", "South end", "West side", 100, 80,
-                        44, 36, 28, 32)));
+                StadiumShape.OVAL,
+                sections(114, 99, 250000, 127, 89, 190000, 127, 89, 140000, 130, 87, 95000)));
         stadiums.add(new Stadium(
-                "southside-coliseum",
-                "Southside Coliseum",
-                "Atlanta",
-                "United States",
-                "Circular entertainment coliseum",
-                "A southern entertainment landmark for high-energy basketball, football and touring concerts.",
-                "100 Arena Way, Atlanta",
-                24800,
-                "#ea580c",
-                StadiumShape.CIRCULAR,
-                sections("North end", "East side", "South end", "West side", 100, 62,
-                        52, 43, 33, 37)));
-        stadiums.add(new Stadium(
-                "desert-field",
-                "Desert Field",
-                "Phoenix",
-                "United States",
-                "Oval outdoor sports stadium",
-                "A sunlit open-air venue for baseball, football and spectacular desert concerts.",
-                "1 East Camelback Road, Phoenix",
-                26400,
+                "hoima-city",
+                "Hoima City Stadium",
+                "Hoima",
+                "Uganda",
+                "Municipal football stadium",
+                "A modern civic stadium in the Bwinege capital of western Uganda, opened for the "
+                        + "FUFA Drum and the home ground of Kitara FC.",
+                "Hoima Town, Hoima District, Western Uganda",
+                20000,
                 "#ca8a04",
-                StadiumShape.OVAL,
-                sections("North end", "East side", "South end", "West side", 110, 60,
-                        40, 34, 27, 30)));
-        stadiums.add(new Stadium(
-                "nordic-arena",
-                "Nordic Arena",
-                "Stockholm",
-                "Sweden",
-                "Circular winter arena",
-                "A glass-roofed winter arena built for hockey, international football and Nordic music.",
-                "2 Arena Lane, Stockholm",
-                21600,
-                "#4f46e5",
-                StadiumShape.CIRCULAR,
-                sections("North end", "East side", "South end", "West side", 60, 90,
-                        55, 46, 35, 40)));
-        stadiums.add(new Stadium(
-                "sakura-stadium",
-                "Sakura Stadium",
-                "Tokyo",
-                "Japan",
-                "Box-shaped national stadium",
-                "A modern four-sided national venue for football, basketball and spectacular live performances.",
-                "1 Sakura Walk, Tokyo",
-                36000,
-                "#db2777",
                 StadiumShape.BOX,
-                sections("North end", "East side", "South end", "West side", 120, 75,
-                        48, 40, 30, 35)));
+                sections(100, 50, 90000, 100, 50, 70000, 100, 50, 55000, 100, 50, 40000)));
         stadiums.add(new Stadium(
-                "coastal-arena",
-                "Coastal Arena",
-                "Miami",
-                "United States",
-                "Oval coastal sports and concert arena",
-                "A bright coastal venue where basketball, baseball, football and music share the same bowl.",
-                "50 Ocean Drive, Miami",
-                30000,
-                "#0284c7",
+                "hamz-stadium",
+                "Hamz Stadium (Nakivubo)",
+                "Kampala",
+                "Uganda",
+                "Historic urban football ground",
+                "Kampala's oldest surviving stadium, first used in 1926 and rebuilt as Hamz Stadium. "
+                        + "Its tight brick bowl sits in the middle of the city and is the traditional "
+                        + "home of Express FC.",
+                "Nakivubo, Kampala, Central Region",
+                15000,
+                "#b45309",
+                StadiumShape.BOX,
+                sections(75, 50, 80000, 75, 50, 60000, 75, 50, 45000, 75, 50, 35000)));
+        stadiums.add(new Stadium(
+                "st-marys",
+                "St. Mary's Stadium, Kitende",
+                "Entebbe",
+                "Uganda",
+                "Club football stadium",
+                "The compact modern home of Vipers SC on the Kampala-Entebbe road, known for its "
+                        + "loud atmosphere and a steep, close-to-the-pitch bowl.",
+                "Kitende, Wakiso District, Entebbe Road",
+                15000,
+                "#15803d",
                 StadiumShape.OVAL,
-                sections("North end", "East side", "South end", "West side", 100, 75,
-                        51, 42, 32, 37)));
+                sections(75, 50, 85000, 75, 50, 65000, 75, 50, 50000, 75, 50, 38000)));
+        stadiums.add(new Stadium(
+                "omondi",
+                "MTN Omondi Stadium, Lugogo",
+                "Kampala",
+                "Uganda",
+                "City football stadium",
+                "Lugogo's municipal ground, opened in 1957 and home of KCCA FC. A compact bowl in the "
+                        + "middle of Kampala's central business district.",
+                "Lugogo, Kampala, Central Region",
+                10000,
+                "#1d4ed8",
+                StadiumShape.OVAL,
+                sections(50, 50, 60000, 50, 50, 48000, 50, 50, 38000, 50, 50, 28000)));
+        stadiums.add(new Stadium(
+                "mutesa-ii",
+                "Mutesa II Stadium, Wankulukuku",
+                "Kampala",
+                "Uganda",
+                "Kampala city stadium",
+                "A multi-purpose city stadium in Wankulukuku, used for football, athletics and "
+                        + "national team fixtures in the run-up to international matches.",
+                "Wankulukuku, Kampala, Central Region",
+                8000,
+                "#0f766e",
+                StadiumShape.CIRCULAR,
+                sections(40, 50, 55000, 40, 50, 42000, 40, 50, 32000, 40, 50, 25000)));
+        stadiums.add(new Stadium(
+                "kadiba",
+                "FUFA Kadiba Stadium",
+                "Kampala",
+                "Uganda",
+                "Federation club ground",
+                "A modern four-sided ground in Kadiba developed by the federation, used for Uganda "
+                        + "Premier League fixtures and the home matches of SC Villa.",
+                "Kadiba, Kawempe, Kampala",
+                7000,
+                "#7c3aed",
+                StadiumShape.BOX,
+                sections(35, 50, 50000, 35, 50, 40000, 35, 50, 32000, 35, 50, 24000)));
+        stadiums.add(new Stadium(
+                "bunamwaya",
+                "Bunamwaya Stadium",
+                "Wakiso Town",
+                "Uganda",
+                "Community club ground",
+                "A small community ground in Bunamwaya that grew out of a village football pitch and "
+                        + "is now used for lower division and academy fixtures.",
+                "Bunamwaya, Wakiso District",
+                5000,
+                "#a16207",
+                StadiumShape.BOX,
+                sections(25, 50, 35000, 25, 50, 28000, 25, 50, 22000, 25, 50, 16000)));
+        stadiums.add(new Stadium(
+                "bugembe",
+                "Kyabazinga Stadium, Bugembe",
+                "Jinja",
+                "Uganda",
+                "Regional multi-purpose stadium",
+                "The main football venue of the Busoga region, a perennial host of FUFA Cup ties and "
+                        + "Uganda Premier League fixtures in Jinja.",
+                "Bugembe, Jinja, Eastern Uganda",
+                12000,
+                "#0e7490",
+                StadiumShape.OVAL,
+                sections(60, 50, 65000, 60, 50, 50000, 60, 50, 40000, 60, 50, 30000)));
+        stadiums.add(new Stadium(
+                "mbale-municipal",
+                "Mbale Municipal Stadium",
+                "Mbale",
+                "Uganda",
+                "Municipal football ground",
+                "The civic stadium of Mbale in the eastern highlands, used by FUFA club fixtures and "
+                        + "regional cup matches.",
+                "Mbale, Eastern Uganda",
+                5000,
+                "#b91c1c",
+                StadiumShape.BOX,
+                sections(25, 50, 40000, 25, 50, 32000, 25, 50, 25000, 25, 50, 18000)));
+        stadiums.add(new Stadium(
+                "pece-war",
+                "Pece War Memorial Stadium",
+                "Gulu",
+                "Uganda",
+                "War memorial stadium",
+                "Northern Uganda's oldest major sports ground, built by the British in 1959 as a "
+                        + "Second World War memorial and long the home of Gulu United FC.",
+                "Pece, Gulu, Northern Uganda",
+                3000,
+                "#334155",
+                StadiumShape.OVAL,
+                sections(15, 50, 30000, 15, 50, 24000, 15, 50, 19000, 15, 50, 14000)));
         return Collections.unmodifiableList(stadiums);
     }
 
-    private static List<SeatSection> sections(String north,
-                                             String east,
-                                             String south,
-                                             String west,
-                                             int rows,
-                                             int seatsPerRow,
-                                             double northPrice,
-                                             double eastPrice,
-                                             double southPrice,
-                                             double westPrice) {
+    /**
+     * Builds the four seating sections from explicit grids. Capacities are the real
+     * published figures, so the grids are sized to total exactly the stated
+     * capacity, which {@link Stadium} validates.
+     */
+    private static List<SeatSection> sections(int rowsA, int seatsA, double priceA,
+                                              int rowsB, int seatsB, double priceB,
+                                              int rowsC, int seatsC, double priceC,
+                                              int rowsD, int seatsD, double priceD) {
         List<SeatSection> sections = new ArrayList<>();
-        sections.add(new SeatSection("A", north, rows, seatsPerRow, northPrice));
-        sections.add(new SeatSection("B", east, rows, seatsPerRow, eastPrice));
-        sections.add(new SeatSection("C", south, rows, seatsPerRow, southPrice));
-        sections.add(new SeatSection("D", west, rows, seatsPerRow, westPrice));
+        sections.add(new SeatSection("A", SECTION_LABELS[0], rowsA, seatsA, priceA));
+        sections.add(new SeatSection("B", SECTION_LABELS[1], rowsB, seatsB, priceB));
+        sections.add(new SeatSection("C", SECTION_LABELS[2], rowsC, seatsC, priceC));
+        sections.add(new SeatSection("D", SECTION_LABELS[3], rowsD, seatsD, priceD));
         return sections;
     }
 
     private static List<StadiumEvent> createEvents() {
         List<StadiumEvent> events = new ArrayList<>();
 
-        events.add(game("grand-01", "grand-arena", "Basketball",
-                "New York Knicks", "Boston Celtics", 1, 19, 30, 18, 30, 1.20,
-                "A prime-time rivalry game with both teams in championship form."));
-        events.add(concert("grand-02", "grand-arena", "Aurora World Tour",
-                "Aurora", 2, 20, 0, 18, 30, 1.00,
-                "A cinematic arena concert featuring new music and a full light show."));
-        events.add(game("grand-03", "grand-arena", "Baseball",
-                "New York Yankees", "Boston Red Sox", 3, 18, 40, 17, 40, 1.10,
-                "A traditional rivalry under the lights with post-match city views."));
-        events.add(concert("grand-04", "grand-arena", "City Lights Live",
-                "The Northern Notes", 4, 20, 0, 18, 0, 1.05,
-                "A high-energy evening of anthems, drums and audience sing-alongs."));
-        events.add(game("grand-05", "grand-arena", "Basketball",
-                "Los Angeles Lakers", "Miami Heat", 6, 19, 0, 17, 30, 1.25,
-                "Two historic franchises meet in a showcase basketball event."));
-        events.add(concert("grand-06", "grand-arena", "Midnight Sessions",
-                "Velvet Avenue", 8, 20, 30, 18, 30, 0.95,
-                "A late-night concert experience with immersive stage production."));
-        events.add(concert("grand-07", "grand-arena", "Daylight Sessions",
-                "Luna Park", 1, 16, 0, 15, 0, 0.90,
-                "An early acoustic performance before the evening game."));
-        events.add(concert("grand-08", "grand-arena", "Season Finale",
-                "The Horizon", 45, 20, 0, 18, 30, 1.10,
-                "A future headline concert with a long booking window."));
+        // --- Mandela National Stadium (Namboole), Kampala ---
+        events.add(game("namboole-01", "namboole", "Football",
+                "Uganda Cranes", "Kenya Harambee Stars", 1, 19, 30, 17, 30, 1.25,
+                "A CECAFA qualifier at the national stadium, with the Cranes playing in front of a "
+                        + "full Namboole crowd."));
+        events.add(game("namboole-02", "namboole", "Football",
+                "Vipers SC", "SC Villa", 3, 15, 0, 13, 0, 1.20,
+                "The biggest club duel on the calendar, with the two most successful Kampala sides "
+                        + "meeting on the big stage."));
+        events.add(concert("namboole-03", "namboole", "Eddy Kenzo Live at Namboole",
+                "Eddy Kenzo", 2, 20, 0, 18, 0, 1.10,
+                "The Big Talent boss brings his dancehall catalogue to the national stadium for a full "
+                        + "night of hits."));
+        events.add(game("namboole-04", "namboole", "Football",
+                "Uganda Cranes", "Tanzania Taifa Stars", 5, 20, 0, 18, 0, 1.20,
+                "A regional derby in the east, with the Cranes seeking revenge from the last meeting."));
+        events.add(concert("namboole-05", "namboole", "Bwatibhappu Festival Night",
+                "Bobi Wine", 6, 20, 0, 18, 30, 1.15,
+                "One night of the Bwatibhappu festival: a homecoming show with a full light and "
+                        + "effects production."));
+        events.add(game("namboole-06", "namboole", "Football",
+                "KCCA FC", "Express FC", 8, 19, 0, 17, 0, 1.10,
+                "A Kampala derby at national stadium scale, between the city club and the old guard."));
+        events.add(game("namboole-07", "namboole", "Football",
+                "URA FC", "Police FC", 10, 16, 0, 14, 0, 1.05,
+                "Two of the country's oldest institution clubs, URA and Police, meeting on the big "
+                        + "stage."));
+        events.add(concert("namboole-08", "namboole", "Jose Chameleone: The Golden Voice",
+                "Jose Chameleone", 12, 20, 0, 18, 0, 1.00,
+                "The Leone Island boss returns to the national stadium with a career-spanning set."));
 
-        events.add(game("river-01", "riverside-stadium", "Football",
-                "Manchester City", "Liverpool", 1, 16, 30, 15, 0, 1.25,
-                "A top-level football meeting between two title contenders."));
-        events.add(game("river-02", "riverside-stadium", "Football",
-                "Arsenal", "Chelsea", 2, 20, 0, 18, 0, 1.20,
-                "A London derby with attacking football and a loud home crowd."));
-        events.add(concert("river-03", "riverside-stadium", "Northern Lights Tour",
-                "Elias Stone", 3, 19, 30, 17, 30, 1.00,
-                "A stadium-scale concert returning for one special night."));
-        events.add(game("river-04", "riverside-stadium", "Football",
-                "Manchester United", "Tottenham Hotspur", 5, 17, 30, 15, 30, 1.15,
-                "A fast-paced Sunday fixture with a full stadium atmosphere."));
-        events.add(game("river-05", "riverside-stadium", "Football",
-                "Newcastle United", "Brighton", 7, 20, 0, 18, 0, 1.10,
-                "A late-season clash between two ambitious and entertaining sides."));
-        events.add(game("river-07", "riverside-stadium", "Football",
-                "Everton", "Fulham", 1, 14, 0, 13, 0, 1.00,
-                "An afternoon fixture that opens the stadium's football weekend."));
-        events.add(concert("river-06", "riverside-stadium", "Summer Sound",
-                "Harbour Lights", 9, 19, 0, 17, 0, 1.00,
-                "A relaxed summer evening of pop, soul and stadium anthems."));
+        // --- Hoima City Stadium, Hoima ---
+        events.add(game("hoima-01", "hoima-city", "Football",
+                "Kitara FC", "NEC FC", 1, 16, 0, 14, 0, 1.10,
+                "A western Uganda heavyweight fixture in front of a home crowd that fills the Drum."));
+        events.add(game("hoima-02", "hoima-city", "Football",
+                "Kitara FC", "BUL FC", 4, 19, 0, 17, 0, 1.05,
+                "A midweek evening clash with both sides chasing qualification points."));
+        events.add(concert("hoima-03", "hoima-city", "Azawi Live in Hoima",
+                "Azawi", 3, 20, 0, 18, 0, 1.00,
+                "The Mother of Uganda's music takes her Naponda sound west to Hoima."));
+        events.add(game("hoima-04", "hoima-city", "Football",
+                "Mbarara City FC", "Kigezi Homeboyz FC", 6, 15, 0, 13, 0, 1.00,
+                "Two of Uganda's best-supported regional sides meet in a local derby atmosphere."));
 
-        events.add(game("pacific-01", "pacific-dome", "Basketball",
-                "Los Angeles Lakers", "Golden State Warriors", 1, 19, 0, 17, 30, 1.30,
-                "A marquee basketball matchup in the heart of Los Angeles."));
-        events.add(concert("pacific-02", "pacific-dome", "The Sound of Soul",
-                "Maya Rivers", 2, 20, 0, 18, 0, 1.10,
-                "A soulful live show with a carefully designed intimate atmosphere."));
-        events.add(game("pacific-03", "pacific-dome", "Hockey",
-                "Los Angeles Kings", "Vegas Golden Knights", 3, 19, 30, 18, 0, 1.15,
-                "A high-tempo hockey night with rivalry and playoff-level energy."));
-        events.add(game("pacific-04", "pacific-dome", "Basketball",
-                "Phoenix Suns", "Dallas Mavericks", 5, 19, 0, 17, 30, 1.20,
-                "A big-time Western Conference basketball showcase."));
-        events.add(concert("pacific-05", "pacific-dome", "Velvet Underground",
-                "Nova Lane", 6, 20, 0, 18, 0, 1.05,
-                "A modern rock performance with a dramatic light and stage design."));
-        events.add(game("pacific-06", "pacific-dome", "Hockey",
-                "Seattle Kraken", "Vegas Golden Knights", 8, 18, 0, 16, 30, 1.10,
-                "A memorable evening of speed, skill and physical hockey."));
-        events.add(concert("pacific-07", "pacific-dome", "Acoustic Sunset",
-                "Nia Cole", 1, 16, 30, 15, 30, 0.90,
-                "An intimate acoustic set in the dome before the evening programme."));
+        // --- Hamz Stadium (Nakivubo), Kampala ---
+        events.add(game("hamz-01", "hamz-stadium", "Football",
+                "Express FC", "SC Villa", 1, 16, 30, 14, 30, 1.15,
+                "The most traditional fixture on the Ugandan calendar, played a short walk from "
+                        + "Kampala's market."));
+        events.add(game("hamz-02", "hamz-stadium", "Football",
+                "Express FC", "Soltilo Bright Stars FC", 4, 19, 0, 17, 0, 1.05,
+                "A packed Nakivubo evening where the Red put on a show for their city supporters."));
+        events.add(concert("hamz-03", "hamz-stadium", "Bebe Cool Live",
+                "Bebe Cool", 2, 20, 0, 18, 30, 1.05,
+                "The East African legend brings his dancehall gospel to the historic Nakivubo bowl."));
+        events.add(game("hamz-04", "hamz-stadium", "Football",
+                "UPDF FC", "Police FC", 7, 16, 0, 14, 0, 1.00,
+                "Two disciplined institution sides meet in a tight Nakivubo fixture."));
+        events.add(concert("hamz-05", "hamz-stadium", "King Saha Solo Live",
+                "King Saha", 9, 20, 0, 18, 0, 0.95,
+                "The Ggaba boss on a solo run through his dancehall hits in an intimate setting."));
 
-        events.add(game("metro-01", "metro-dome", "Basketball",
-                "Chicago Bulls", "Detroit Pistons", 1, 19, 0, 17, 30, 1.15,
-                "A downtown basketball rivalry with a loud national broadcast atmosphere."));
-        events.add(concert("metro-02", "metro-dome", "Neon Horizon",
-                "Neon Horizon", 2, 20, 0, 18, 30, 1.00,
-                "A bright electronic concert with a full-stage light and laser production."));
-        events.add(game("metro-03", "metro-dome", "Hockey",
-                "Chicago Blackhawks", "Colorado Avalanche", 4, 18, 30, 17, 0, 1.10,
-                "A high-tempo hockey matchup beneath the dome lights."));
-        events.add(concert("metro-04", "metro-dome", "Summer Sessions",
-                "The Echoes", 7, 19, 30, 18, 0, 1.00,
-                "A summery live set featuring fan favourites and new material."));
+        // --- St. Mary's Stadium, Kitende ---
+        events.add(game("st-marys-01", "st-marys", "Football",
+                "Vipers SC", "KCCA FC", 1, 19, 0, 17, 30, 1.25,
+                "A title-deciding fixture in a stadium barely 20 minutes from Kampala, with a famously "
+                        + "loud home crowd."));
+        events.add(game("st-marys-02", "st-marys", "Football",
+                "Vipers SC", "Express FC", 4, 19, 0, 17, 0, 1.15,
+                "The Venoms look to continue a strong run at home against the old capital club."));
+        events.add(game("st-marys-03", "st-marys", "Football",
+                "Vipers SC", "Maroons FC", 7, 15, 0, 13, 0, 1.05,
+                "A weekend afternoon home fixture with the chance to catch a rise in form."));
+        events.add(concert("st-marys-04", "st-marys", "Radio and Weasel Live",
+                "Radio & Weasel", 2, 20, 0, 18, 0, 1.00,
+                "The duo behind Sugendalo return to a stadium stage for a full-band celebration."));
+        events.add(game("st-marys-05", "st-marys", "Football",
+                "Vipers SC", "Kigezi Homeboyz FC", 10, 19, 0, 17, 0, 1.05,
+                "A home meeting with a Western Region side that always travels well."));
 
-        events.add(game("harbor-01", "harbor-arena", "Basketball",
-                "Seattle SuperSonics", "Portland Trail Blazers", 1, 19, 0, 17, 30, 1.20,
-                "A waterfront basketball rivalry with city pride on the line."));
-        events.add(concert("harbor-02", "harbor-arena", "Pacific Night",
-                "Maya Rivers", 3, 20, 0, 18, 30, 1.05,
-                "A polished live performance overlooking the waterfront."));
-        events.add(game("harbor-03", "harbor-arena", "Hockey",
-                "Seattle Kraken", "Vancouver Canucks", 5, 18, 0, 16, 30, 1.10,
-                "A regional hockey duel with a fast and physical style."));
-        events.add(concert("harbor-04", "harbor-arena", "Soundwave",
-                "Northstar", 8, 20, 0, 18, 30, 0.95,
-                "A large-scale concert built around guitars, drums and cinematic visuals."));
+        // --- MTN Omondi Stadium, Lugogo ---
+        events.add(game("omondi-01", "omondi", "Football",
+                "KCCA FC", "SC Villa", 1, 16, 0, 14, 0, 1.15,
+                "The biggest attendance of any Kampala club match, played a stone's throw from the "
+                        + "city centre."));
+        events.add(game("omondi-02", "omondi", "Football",
+                "KCCA FC", "URA FC", 4, 19, 0, 17, 0, 1.05,
+                "The city club against the Revenue Authority, a fixture with a big following on both "
+                        + "sides."));
+        events.add(game("omondi-03", "omondi", "Netball",
+                "She Cranes", "Zambia", 2, 18, 0, 16, 0, 1.00,
+                "Uganda's national netball side in front of a home crowd at the Lugogo indoor arena."));
+        events.add(game("omondi-04", "omondi", "Football",
+                "KCCA FC", "Lugazi FC", 6, 15, 0, 13, 0, 1.00,
+                "An afternoon Lugogo fixture with the city club seeking a comfortable home win."));
 
-        events.add(game("crown-01", "crown-park", "Football",
-                "Toronto FC", "Montreal Impact", 1, 16, 0, 14, 30, 1.15,
-                "A Canadian football rivalry with a strong international following."));
-        events.add(concert("crown-02", "crown-park", "Crown Summer",
-                "Ari Lane", 2, 20, 0, 18, 30, 1.00,
-                "A bright summer concert featuring pop anthems and a full band."));
-        events.add(game("crown-03", "crown-park", "Football",
-                "Canada", "United States", 6, 19, 0, 17, 0, 1.25,
-                "A national-team fixture with a highly anticipated atmosphere."));
-        events.add(concert("crown-04", "crown-park", "Northern Lights",
-                "Celine Hart", 10, 20, 0, 18, 30, 1.05,
-                "A sweeping arena show with orchestral and electronic elements."));
+        // --- Mutesa II Stadium, Wankulukuku ---
+        events.add(game("mutesa-01", "mutesa-ii", "Football",
+                "Kataka FC", "Blacks Power FC", 1, 19, 0, 17, 0, 1.05,
+                "A Wankulukuku evening between two of the newest Uganda Premier League clubs."));
+        events.add(concert("mutesa-02", "mutesa-ii", "Fame Fest Live",
+                "Fik Fameica", 3, 20, 0, 18, 0, 1.00,
+                "The Gulu-born star brings his Fame Fest energy to a Kampala stage."));
+        events.add(game("mutesa-03", "mutesa-ii", "Football",
+                "Blacks Power FC", "Ntugasaze FC", 5, 19, 0, 17, 0, 1.00,
+                "A night match under the floodlights with two promotion-chasing sides."));
 
-        events.add(game("south-01", "southside-coliseum", "Basketball",
-                "Atlanta Hawks", "Charlotte Hornets", 1, 19, 0, 17, 30, 1.10,
-                "A fast-paced basketball game in a classic southern basketball home."));
-        events.add(concert("south-02", "southside-coliseum", "Southern Lights",
-                "Lena Brooks", 2, 20, 0, 18, 30, 1.00,
-                "A soulful concert with a warm vocal performance and full band."));
-        events.add(game("south-03", "southside-coliseum", "American football",
-                "Atlanta Falcons", "New Orleans Saints", 5, 16, 0, 14, 30, 1.20,
-                "A high-energy football game with classic conference rivalries."));
-        events.add(concert("south-04", "southside-coliseum", "Rhythm & Blues Night",
-                "The Blue Notes", 9, 20, 0, 18, 30, 0.95,
-                "A late-night blues and soul celebration for a full coliseum."));
+        // --- FUFA Kadiba Stadium, Kampala ---
+        events.add(game("kadiba-01", "kadiba", "Football",
+                "SC Villa", "Express FC", 1, 19, 0, 17, 0, 1.15,
+                "The most decorated clubs in Ugandan football meet on the federation's new ground."));
+        events.add(game("kadiba-02", "kadiba", "Football",
+                "SC Villa", "Buhimba United Saints FC", 4, 15, 0, 13, 0, 1.00,
+                "A home fixture where the Villa look to build on a strong start to the season."));
+        events.add(concert("kadiba-03", "kadiba", "Sheebah Live in Kampala",
+                "Sheebah", 2, 20, 0, 18, 0, 0.95,
+                "The Wololo star performs a high-energy set for her home city."));
 
-        events.add(game("desert-01", "desert-field", "Baseball",
-                "Arizona Diamondbacks", "Colorado Rockies", 1, 18, 30, 17, 0, 1.10,
-                "A desert baseball matchup with a dramatic open-air setting."));
-        events.add(game("desert-02", "desert-field", "Football",
-                "Phoenix Rising", "LA Galaxy", 3, 19, 0, 17, 0, 1.15,
-                "A colorful football fixture under the lights."));
-        events.add(concert("desert-03", "desert-field", "Desert Bloom",
-                "Canyon Sun", 4, 20, 0, 18, 30, 1.00,
-                "A sunset concert experience with desert-inspired visuals."));
-        events.add(game("desert-04", "desert-field", "Baseball",
-                "Arizona Diamondbacks", "San Diego Padres", 8, 18, 30, 17, 0, 1.05,
-                "A rematch under the lights with a competitive late-innings finish expected."));
+        // --- Bunamwaya Stadium, Wakiso ---
+        events.add(game("bunamwaya-01", "bunamwaya", "Football",
+                "Gaddafi FC", "Booma FC", 1, 16, 0, 14, 0, 1.00,
+                "A packed community ground meeting for two sides that play the game close to the "
+                        + "terraces."));
+        events.add(game("bunamwaya-02", "bunamwaya", "Football",
+                "Onduparaka FC", "Kiyinda Boys FC", 4, 19, 0, 17, 0, 0.95,
+                "A midweek tie under lights in a genuinely local football atmosphere."));
+        events.add(concert("bunamwaya-03", "bunamwaya", "Ndere Live",
+                "Juliana Kanyomozi", 3, 20, 0, 18, 0, 0.95,
+                "The Queen of Ugandan music leads a traditional and contemporary set for her home "
+                        + "crowd."));
 
-        events.add(game("nordic-01", "nordic-arena", "Hockey",
-                "Sweden", "Finland", 2, 18, 0, 16, 30, 1.20,
-                "A high-skill northern hockey rivalry under a glass roof."));
-        events.add(concert("nordic-02", "nordic-arena", "Arctic Light",
-                "Vega", 3, 20, 0, 18, 30, 1.05,
-                "A dramatic Nordic concert with atmospheric lighting and live strings."));
-        events.add(game("nordic-03", "nordic-arena", "Football",
-                "Sweden", "Norway", 6, 19, 0, 17, 0, 1.10,
-                "A national football celebration with a passionate home crowd."));
-        events.add(concert("nordic-04", "nordic-arena", "Arctic Symphony",
-                "The Nordic Line", 11, 20, 0, 18, 30, 0.95,
-                "A symphonic pop performance designed for the circular arena."));
+        // --- Kyabazinga Stadium, Bugembe, Jinja ---
+        events.add(game("bugembe-01", "bugembe", "Football",
+                "Jinja North United FC", "BUL FC", 1, 15, 0, 13, 0, 1.05,
+                "A Busoga derby afternoon in Jinja, played in front of a famously vocal home crowd."));
+        events.add(game("bugembe-02", "bugembe", "Football",
+                "BUL FC", "Maroons FC", 4, 19, 0, 17, 0, 1.00,
+                "An evening Jinja meeting with the two eastern sides looking for a home result."));
+        events.add(concert("bugembe-03", "bugembe", "Spice Diana Live",
+                "Spice Diana", 2, 20, 0, 18, 0, 1.00,
+                "The Queen of Ugandan music headlines a full evening in her home region."));
+        events.add(game("bugembe-04", "bugembe", "Rugby",
+                "Heathens RFC", "Kampala RFC", 6, 16, 0, 14, 0, 1.00,
+                "A club rugby fixture in the east, played in front of rugby's strong Jinja following."));
 
-        events.add(game("sakura-01", "sakura-stadium", "Football",
-                "Tokyo FC", "Osaka FC", 1, 17, 0, 15, 0, 1.20,
-                "A major Japanese football meeting with an electric national atmosphere."));
-        events.add(concert("sakura-02", "sakura-stadium", "Sakura Night",
-                "Hikaru", 2, 20, 0, 18, 30, 1.05,
-                "A modern stadium concert with a strong visual and musical production."));
-        events.add(game("sakura-03", "sakura-stadium", "Basketball",
-                "Tokyo Rockets", "Nagoya Dolphins", 5, 19, 0, 17, 30, 1.10,
-                "A high-level basketball matchup with a passionate Tokyo crowd."));
-        events.add(concert("sakura-04", "sakura-stadium", "Future Horizon",
-                "Aoi", 9, 20, 0, 18, 30, 1.00,
-                "A future-facing live show combining pop, dance and cinematic visuals."));
+        // --- Mbale Municipal Stadium ---
+        events.add(game("mbale-01", "mbale-municipal", "Football",
+                "Kataka FC", "Blacks Power FC", 1, 15, 0, 13, 0, 1.00,
+                "An eastern Uganda weekend fixture in the shadow of Mount Elgon."));
+        events.add(game("mbale-02", "mbale-municipal", "Football",
+                "MYDA FC", "Bujagali United", 4, 19, 0, 17, 0, 0.95,
+                "A Big League night match where every point matters in the promotion race."));
+        events.add(concert("mbale-03", "mbale-municipal", "John Blaq Live",
+                "John Blaq", 2, 20, 0, 18, 0, 0.95,
+                "The Nabukalu banger brings his own dancehall style to the eastern highlands."));
 
-        events.add(game("coastal-01", "coastal-arena", "Basketball",
-                "Miami Heat", "Boston Celtics", 1, 19, 0, 17, 30, 1.20,
-                "A major basketball matchup in a bright coastal setting."));
-        events.add(game("coastal-02", "coastal-arena", "Baseball",
-                "Miami Marlins", "Atlanta Braves", 2, 18, 30, 17, 0, 1.10,
-                "A baseball evening with a strong home crowd and a quick start."));
-        events.add(concert("coastal-03", "coastal-arena", "Coastal Vibes",
-                "Solara", 4, 20, 0, 18, 30, 1.00,
-                "A breezy coastal concert with bright lights and a live horn section."));
-        events.add(game("coastal-04", "coastal-arena", "Football",
-                "Inter Miami", "New York City", 7, 19, 30, 17, 30, 1.15,
-                "A high-profile football night with an international atmosphere."));
+        // --- Pece War Memorial Stadium, Gulu ---
+        events.add(game("pece-01", "pece-war", "Football",
+                "Gulu United FC", "Young Elephant FC", 1, 15, 0, 13, 0, 1.00,
+                "A northern Uganda derby at the country's oldest major ground, restored with "
+                        + "support from the community."));
+        events.add(game("pece-02", "pece-war", "Football",
+                "Acholi United", "Kigezi Homeboyz FC", 4, 19, 0, 17, 0, 0.95,
+                "A night fixture where visitors from the west travel all the way to the far north."));
+        events.add(concert("pece-03", "pece-war", "Iryn Namubiru Live",
+                "Iryn Namubiru", 3, 20, 0, 18, 0, 0.95,
+                "A gospel and soul evening in the north, in front of a capacity crowd."));
 
         return Collections.unmodifiableList(events);
     }
@@ -424,29 +429,34 @@ public final class StadiumData {
         LocalDateTime now = LocalDateTime.now();
         List<StadiumAnnouncement> announcements = new ArrayList<>();
         announcements.add(new StadiumAnnouncement(
-                "grand-notice-01", "grand-arena", "grand-01", AnnouncementType.NOTICE,
-                "Enhanced arrival information",
-                "Use the north entrance for accessible seating and arrive early for security screening.",
+                "namboole-notice-01", "namboole", "namboole-01", AnnouncementType.NOTICE,
+                "Match-day entry and security screening",
+                "Spectators should arrive early through the north gate. Accessible seating and "
+                        + "wheelchair spaces are available from the VIP box entrance.",
                 now.minusHours(2), now.plusDays(30)));
         announcements.add(new StadiumAnnouncement(
-                "grand-cancel-01", "grand-arena", "grand-03", AnnouncementType.CANCELLATION,
-                "Game cancelled — weather monitoring",
-                "The Yankees vs Red Sox game is cancelled while the venue team monitors severe weather.",
+                "namboole-cancel-01", "namboole", "namboole-04", AnnouncementType.CANCELLATION,
+                "Match postponed — heavy rain warning",
+                "The Cranes vs Taifa Stars qualifier has been postponed while the venue team monitors "
+                        + "a heavy rain warning for the Kampala area.",
                 now.minusHours(1), now.plusDays(14)));
         announcements.add(new StadiumAnnouncement(
-                "grand-schedule-01", "grand-arena", "", AnnouncementType.SCHEDULE_CHANGE,
-                "Concert doors may open earlier",
-                "For selected concerts, doors may open up to 30 minutes earlier than the published time.",
+                "namboole-schedule-01", "namboole", "", AnnouncementType.SCHEDULE_CHANGE,
+                "Concert gates may open earlier",
+                "For concerts, gates may open up to 60 minutes before the published doors time to "
+                        + "allow security screening.",
                 now.minusDays(1), now.plusDays(45)));
         announcements.add(new StadiumAnnouncement(
-                "river-emergency-01", "riverside-stadium", "river-01", AnnouncementType.EMERGENCY,
-                "Emergency entrance change",
-                "The east turnstile is temporarily closed. Please follow stadium staff to the west entrance.",
+                "hamz-emergency-01", "hamz-stadium", "hamz-01", AnnouncementType.EMERGENCY,
+                "Entrance change for the Express derby",
+                "The western turnstile is closed for maintenance. Please follow stadium staff to the "
+                        + "southern entrance off Busikwa Road.",
                 now.minusMinutes(30), now.plusDays(2)));
         announcements.add(new StadiumAnnouncement(
-                "pacific-notice-01", "pacific-dome", "pacific-01", AnnouncementType.NOTICE,
-                "Quiet arrival support available",
-                "Guests needing a quieter arrival route can contact the venue team before the event.",
+                "kitende-notice-01", "st-marys", "st-marys-01", AnnouncementType.NOTICE,
+                "Home fans arrival support",
+                "Home supporters should use the Entebbe Road entrance. Accessible seating supporters "
+                        + "can contact the venue team in advance for assisted entry.",
                 now.minusHours(4), now.plusDays(30)));
         return Collections.unmodifiableList(announcements);
     }

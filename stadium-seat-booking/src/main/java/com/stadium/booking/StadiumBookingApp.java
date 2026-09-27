@@ -2197,7 +2197,7 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private String currency(double amount) {
-        return String.format(Locale.US, "$%.2f", amount);
+        return BookingService.formatMoney(amount);
     }
 
     private String formatCapacity(int capacity) {

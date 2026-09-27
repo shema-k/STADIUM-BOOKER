@@ -8,8 +8,8 @@ A professional desktop stadium directory and seat-booking application built with
 
 - Stadium directory with venue information
 - Search stadiums by name, city, country, team or artist
-- Eleven sample venues with locations, capacity and venue descriptions
-- All sample stadiums have more than 20,000 seats
+- Eleven real Ugandan venues with locations, capacity and venue descriptions
+- Real published capacities, from Namboole's 45,202 down to Pece Stadium's 3,000
 - Box-shaped, oval and circular stadium layouts
 - Four seating ends/sides (A, B, C and D) with independent rows
 - Front rows use premium pricing; middle and back rows progressively decrease in price
@@ -27,7 +27,7 @@ A professional desktop stadium directory and seat-booking application built with
 - Ability to submit a special request to the stadium team
 - Simplified booking form with only name, email and phone
 - Interactive seat map for sections A, B, C and D
-- Scalable map rendering for stadiums with 20,000+ seats
+- Scalable map rendering, from 3,000-seat grounds up to Namboole's 45,202
 - Tapping a seat shows its exact seat number, status and price
 - No limit on the number of bookings per person; each reservation can contain up to six seats
 - Booking confirmation with a unique reference
@@ -43,19 +43,34 @@ A professional desktop stadium directory and seat-booking application built with
 
 ## Included sample data
 
-- **Grand Arena** — New York, 24,000 seats, box-shaped multi-purpose arena
-- **Riverside Stadium** — Manchester, 32,000 seats, oval football stadium
-- **Pacific Dome** — Los Angeles, 21,600 seats, circular indoor arena
-- **Metro Dome** — Chicago, 28,000 seats, circular dome
-- **Harbor Arena** — Seattle, 22,400 seats, oval waterfront arena
-- **Crown Park** — Toronto, 32,000 seats, box-shaped stadium
-- **Southside Coliseum** — Atlanta, 24,800 seats, circular coliseum
-- **Desert Field** — Phoenix, 26,400 seats, oval outdoor stadium
-- **Nordic Arena** — Stockholm, 21,600 seats, circular winter arena
-- **Sakura Stadium** — Tokyo, 36,000 seats, box-shaped national stadium
-- **Coastal Arena** — Miami, 30,000 seats, oval coastal arena
-- Game schedules include basketball, baseball, football and hockey with named teams
-- Concert schedules include named artists and concert titles
+Real Ugandan venues, clubs and artists. Capacities are the published figures, and each
+venue's seat grid totals exactly its stated capacity.
+
+| Venue | City | Capacity | Home club / use |
+|---|---|---|---|
+| Mandela National Stadium (Namboole) | Kampala | 45,202 | Uganda Cranes, URA FC, Police FC |
+| Hoima City Stadium | Hoima | 20,000 | Kitara FC |
+| Hamz Stadium (Nakivubo) | Kampala | 15,000 | Express FC |
+| St. Mary's Stadium, Kitende | Entebbe | 15,000 | Vipers SC |
+| Kyabazinga Stadium, Bugembe | Jinja | 12,000 | Jinja North United FC |
+| MTN Omondi Stadium, Lugogo | Kampala | 10,000 | KCCA FC |
+| Mutesa II Stadium, Wankulukuku | Kampala | 8,000 | Kampala city stadium |
+| FUFA Kadiba Stadium | Kampala | 7,000 | SC Villa |
+| Bunamwaya Stadium | Wakiso Town | 5,000 | Community club ground |
+| Mbale Municipal Stadium | Mbale | 5,000 | Eastern Uganda municipal ground |
+| Pece War Memorial Stadium | Gulu | 3,000 | Gulu United FC |
+
+- Game schedules use real Uganda Premier League clubs — Vipers SC, SC Villa, KCCA FC,
+  Express FC, URA FC, Police FC, NEC FC, Kitara FC, Maroons FC, Mbarara City FC,
+  Lugazi FC, UPDF FC, Blacks Power FC, Kataka FC, Kigezi Homeboyz FC, BUL FC,
+  Gaddafi FC, Booma FC and more — plus the Uganda Cranes against regional national sides
+- Concerts use real Ugandan artists — Eddy Kenzo, Bobi Wine, Jose Chameleone, Bebe Cool,
+  Fik Fameica, Azawi, Spice Diana, King Saha, Radio & Weasel, Sheebah, John Blaq,
+  Juliana Kanyomozi and Iryn Namubiru
+- Football, netball and rugby fixtures, priced in Ugandan shillings (UGX) and rounded
+  to the nearest 500 shillings, with a UGX 15,000 ticketing fee per reservation
+- Seating sections A to D are the VIP Box, Main Stand, Terrace and Kampala End, with
+  front rows priced highest and the Kampala End cheapest
 
 ## Requirements
 

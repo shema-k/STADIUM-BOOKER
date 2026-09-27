@@ -310,7 +310,7 @@ final class SeatMapPanel extends JPanel {
     }
 
     private String currency(double value) {
-        return String.format(Locale.US, "$%.2f", value);
+        return BookingService.formatMoney(value);
     }
 
     private final class SeatCanvas extends JPanel {
