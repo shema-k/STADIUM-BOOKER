@@ -294,6 +294,28 @@ public final class StadiumBookingApp extends JFrame {
         backNavButton.setEnabled(!"directory".equals(currentScreen));
     }
 
+    private static final String BACK_LABEL = "← Back";
+
+    /**
+     * Shows a modal dialog with custom buttons and returns the label of the button the
+     * user pressed.
+     *
+     * <p>{@link JOptionPane#showOptionDialog} returns the <em>index</em> of the chosen
+     * option rather than the option object itself, so the index is mapped back to its
+     * label here. Without this mapping every custom button would compare unequal to its
+     * own label and the action would be silently discarded. Closing the dialog with the
+     * window button returns {@link JOptionPane#CLOSED_OPTION} and yields {@code null}.
+     */
+    private String showDialogChoice(Component parent, Object message, String title,
+                                    int messageType, String initialChoice, String... choices) {
+        int index = JOptionPane.showOptionDialog(parent, message, title,
+                JOptionPane.DEFAULT_OPTION, messageType, null, choices, initialChoice);
+        if (index < 0 || index >= choices.length) {
+            return null;
+        }
+        return choices[index];
+    }
+
     private void goBack() {
         if ("booking".equals(currentScreen) && selectedStadium != null) {
             openStadium(selectedStadium);
@@ -825,10 +847,9 @@ public final class StadiumBookingApp extends JFrame {
         constraints.fill = GridBagConstraints.BOTH;
         form.add(message, constraints);
 
-        Object result = JOptionPane.showOptionDialog(this, form,
+        String result = showDialogChoice(this, form,
                 "Submit a special request to " + stadium.getName(),
-                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null,
-                new Object[]{"← Back", "Submit request"}, "Submit request");
+                JOptionPane.PLAIN_MESSAGE, "Submit request", BACK_LABEL, "Submit request");
         if (!"Submit request".equals(result)) {
             return;
         }
@@ -1490,14 +1511,14 @@ public final class StadiumBookingApp extends JFrame {
             showWarning("Select at least one seat before confirming.");
             return;
         }
-        Object choice = JOptionPane.showOptionDialog(this,
+        String choice = showDialogChoice(this,
                 "Confirm " + selectedSeats.size() + " seat" + (selectedSeats.size() == 1 ? "" : "s")
                         + " for " + currency(bookingService.getTotalCharge(selectedSeats)) + "?\n\n"
                         + "Seat subtotal: " + currency(bookingService.totalFor(selectedSeats))
                         + "  •  Booking fee: " + currency(bookingService.getBookingFee()) + "\n"
                         + selectedEvent.getHeadline() + "  •  " + selectedEvent.getWhenLabel(),
-                "Confirm booked seats", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
-                new Object[]{"← Back", "Confirm booked seats"}, "Confirm booked seats");
+                "Confirm booked seats", JOptionPane.QUESTION_MESSAGE,
+                "Confirm booked seats", BACK_LABEL, "Confirm booked seats");
         if (!"Confirm booked seats".equals(choice)) {
             return;
         }
@@ -1510,7 +1531,7 @@ public final class StadiumBookingApp extends JFrame {
             updateBookingSummary();
             showStatus("Seat" + (booking.getSeats().size() == 1 ? "" : "s") + " booked: "
                     + booking.getSeatDisplay());
-            JOptionPane.showOptionDialog(this,
+            showDialogChoice(this,
                     "Your seat booking is confirmed.\n\n"
                             + "Booked seat" + (booking.getSeats().size() == 1 ? "" : "s") + ": "
                             + booking.getSeatDisplay() + "\n"
@@ -1518,8 +1539,8 @@ public final class StadiumBookingApp extends JFrame {
                             + "Event: " + booking.getEvent() + "\n"
                             + "Booked before: " + selectedEvent.getBookingDeadlineLabel() + "\n"
                             + "Total: " + currency(booking.getTotal()),
-                    "Booking confirmed", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null,
-                    new Object[]{"← Back"}, "← Back");
+                    "Booking confirmed", JOptionPane.INFORMATION_MESSAGE, BACK_LABEL, BACK_LABEL);
+            refreshBookings();
         } catch (IllegalArgumentException exception) {
             showWarning(exception.getMessage());
         }
@@ -1784,9 +1805,8 @@ public final class StadiumBookingApp extends JFrame {
         scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.getViewport().setBackground(WHITE);
         scroll.setPreferredSize(new Dimension(650, 620));
-        JOptionPane.showOptionDialog(this, scroll, "Complete booking details",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null,
-                new Object[]{"← Back"}, "← Back");
+        showDialogChoice(this, scroll, "Complete booking details",
+                JOptionPane.INFORMATION_MESSAGE, BACK_LABEL, BACK_LABEL);
     }
 
     private void addDetailSection(JPanel parent, String title) {
@@ -1834,10 +1854,10 @@ public final class StadiumBookingApp extends JFrame {
             showWarning("That booking is already cancelled.");
             return;
         }
-        Object choice = JOptionPane.showOptionDialog(this,
+        String choice = showDialogChoice(this,
                 "Cancel booking " + reference + "?\n\nThe seats will become available again.",
-                "Cancel booking", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null,
-                new Object[]{"← Back", "Cancel booking"}, "Cancel booking");
+                "Cancel booking", JOptionPane.WARNING_MESSAGE,
+                "Cancel booking", BACK_LABEL, "Cancel booking");
         if (!"Cancel booking".equals(choice)) {
             return;
         }
@@ -1973,9 +1993,8 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private void showWarning(String message) {
-        JOptionPane.showOptionDialog(this, message, "Please check your booking",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null,
-                new Object[]{"← Back"}, "← Back");
+        showDialogChoice(this, message, "Please check your booking",
+                JOptionPane.WARNING_MESSAGE, BACK_LABEL, BACK_LABEL);
     }
 
     private String joinSeatNames(List<Seat> seats) {
