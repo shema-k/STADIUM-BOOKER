@@ -14,6 +14,10 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.RenderingHints;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
@@ -25,10 +29,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
@@ -37,8 +44,10 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
@@ -195,6 +204,10 @@ public final class StadiumBookingApp extends JFrame {
         addDocumentListener(stadiumSearchField, this::refreshDirectoryIfVisible);
         addDocumentListener(eventSearchField, this::refreshScheduleIfVisible);
         addDocumentListener(bookingSearchField, this::refreshBookingsIfVisible);
+        // Live suggestion lists that refresh as each field is typed into.
+        new SearchSuggestions(stadiumSearchField, this::stadiumSuggestions);
+        new SearchSuggestions(eventSearchField, this::eventSuggestions);
+        new SearchSuggestions(bookingSearchField, this::bookingSuggestions);
     }
 
     private void addDocumentListener(JTextField field, Runnable action) {
@@ -2615,6 +2628,311 @@ public final class StadiumBookingApp extends JFrame {
             setBorder(new EmptyBorder(0, 8, 0, 8));
             return component;
         }
+    }
+
+    /** One row in a live suggestion list. */
+    private static final class Suggestion {
+        final String label;
+        final String detail;
+        final String value;
+
+        Suggestion(String label, String detail, String value) {
+            this.label = label;
+            this.detail = detail == null ? "" : detail;
+            this.value = value;
+        }
+    }
+
+    /**
+     * A live suggestion list attached to a search field. The list refreshes shortly
+     * after every keystroke and can be driven with the arrow keys, Enter, Escape or
+     * the mouse.
+     *
+     * <p>Choosing a row writes the suggestion back into the field, which fires the
+     * field's document listener and so re-runs the existing search filter.
+     */
+    private final class SearchSuggestions {
+        private static final int MAX_ROWS = 8;
+        private final JTextField field;
+        private final Function<String, List<Suggestion>> source;
+        private final Timer debounce;
+        private final JPopupMenu popup = new JPopupMenu();
+        private final JList<Suggestion> list = new JList<>();
+
+        SearchSuggestions(JTextField field, Function<String, List<Suggestion>> source) {
+            this.field = field;
+            this.source = source;
+            this.debounce = new Timer(110, event -> refresh());
+            this.debounce.setRepeats(false);
+
+            list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            list.setCellRenderer(new SuggestionRenderer());
+            list.setBackground(WHITE);
+            list.setFixedCellHeight(44);
+            list.setBorder(new EmptyBorder(4, 0, 4, 0));
+            list.setVisibleRowCount(MAX_ROWS);
+
+            // A non-focusable popup never steals focus, so the field keeps the caret
+            // and the arrow keys keep working while the list is open.
+            popup.setFocusable(false);
+            popup.setBackground(WHITE);
+            popup.setBorder(BorderFactory.createLineBorder(BORDER));
+            popup.add(list);
+            list.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent event) {
+                    int index = list.locationToIndex(event.getPoint());
+                    if (index >= 0) {
+                        list.setSelectedIndex(index);
+                        accept(index);
+                    }
+                }
+            });
+
+            field.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent event) {
+                    schedule();
+                }
+
+                @Override
+                public void removeUpdate(DocumentEvent event) {
+                    schedule();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent event) {
+                    schedule();
+                }
+            });
+            field.addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent event) {
+                    handleKey(event);
+                }
+            });
+            field.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    schedule();
+                }
+
+                @Override
+                public void focusLost(FocusEvent event) {
+                    hideLater();
+                }
+            });
+        }
+
+        private void schedule() {
+            debounce.restart();
+        }
+
+        private void hideLater() {
+            // Let a click on the popup finish before dismissing it.
+            Timer closer = new Timer(120, event -> popup.setVisible(false));
+            closer.setRepeats(false);
+            closer.start();
+        }
+
+        private void refresh() {
+            List<Suggestion> suggestions = source.apply(field.getText());
+            if (suggestions.isEmpty()) {
+                suggestions = List.of(new Suggestion("No matches",
+                        "Try a different word", null));
+            }
+            if (suggestions.size() > MAX_ROWS) {
+                suggestions = new ArrayList<>(suggestions.subList(0, MAX_ROWS));
+            }
+            DefaultListModel<Suggestion> model = new DefaultListModel<>();
+            for (Suggestion suggestion : suggestions) {
+                model.addElement(suggestion);
+            }
+            list.setModel(model);
+            list.setSelectedIndex(0);
+            if (!field.isFocusOwner()) {
+                return;
+            }
+            popup.setPopupSize(Math.max(field.getWidth(), 340),
+                    Math.min(MAX_ROWS, suggestions.size()) * 46 + 8);
+            popup.show(field, 0, field.getHeight() + 2);
+        }
+
+        private void handleKey(KeyEvent event) {
+            if (event.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                if (popup.isVisible()) {
+                    popup.setVisible(false);
+                    event.consume();
+                }
+                return;
+            }
+            if (event.getKeyCode() == KeyEvent.VK_DOWN && popup.isVisible()) {
+                if (list.getSelectedIndex() < list.getModel().getSize() - 1) {
+                    list.setSelectedIndex(list.getSelectedIndex() + 1);
+                }
+                event.consume();
+                return;
+            }
+            if (event.getKeyCode() == KeyEvent.VK_UP && popup.isVisible()) {
+                if (list.getSelectedIndex() > 0) {
+                    list.setSelectedIndex(list.getSelectedIndex() - 1);
+                }
+                event.consume();
+                return;
+            }
+            if (event.getKeyCode() == KeyEvent.VK_ENTER && popup.isVisible()) {
+                accept(list.getSelectedIndex());
+                event.consume();
+            }
+        }
+
+        private void accept(int index) {
+            popup.setVisible(false);
+            if (index < 0 || index >= list.getModel().getSize()) {
+                return;
+            }
+            Suggestion suggestion = list.getModel().getElementAt(index);
+            if (suggestion.value == null) {
+                return;
+            }
+            field.setText(suggestion.value);
+            field.setCaretPosition(field.getText().length());
+            field.requestFocusInWindow();
+        }
+    }
+
+    private final class SuggestionRenderer extends DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(JList<?> source, Object value, int index,
+                                                      boolean selected, boolean focused) {
+            if (!(value instanceof Suggestion suggestion)) {
+                return super.getListCellRendererComponent(source, value, index, selected, focused);
+            }
+            JPanel row = new JPanel(new BorderLayout(0, 1));
+            row.setOpaque(true);
+            row.setBackground(suggestion.value == null ? WHITE
+                    : selected ? new Color(219, 234, 254) : WHITE);
+            JLabel label = new JLabel(suggestion.label);
+            label.setForeground(suggestion.value == null ? MUTED : TEXT);
+            label.setFont(label.getFont().deriveFont(
+                    suggestion.value == null ? Font.PLAIN : Font.BOLD, 11f));
+            JLabel detail = new JLabel(suggestion.detail);
+            detail.setForeground(suggestion.value == null ? new Color(160, 172, 188)
+                    : selected ? BLUE_DARK : MUTED);
+            detail.setFont(detail.getFont().deriveFont(Font.PLAIN, 10f));
+            row.add(label, BorderLayout.NORTH);
+            row.add(detail, BorderLayout.CENTER);
+            row.setBorder(new EmptyBorder(6, 12, 6, 12));
+            return row;
+        }
+    }
+
+    private List<Suggestion> stadiumSuggestions(String query) {
+        String q = query == null ? "" : query.trim().toLowerCase(Locale.ENGLISH);
+        List<Suggestion> suggestions = new ArrayList<>();
+        int venues = 0;
+        for (Stadium stadium : StadiumData.getStadiums()) {
+            List<StadiumEvent> events = StadiumData.getEvents(stadium.getId());
+            boolean eventMatch = events.stream()
+                    .anyMatch(event -> event.searchableText().contains(q));
+            if (!q.isEmpty() && !stadium.searchableText().contains(q) && !eventMatch) {
+                continue;
+            }
+            venues++;
+            StadiumEvent next = events.isEmpty() ? null : events.get(0);
+            suggestions.add(new Suggestion(stadium.getName(),
+                    stadium.getLocation() + "  •  " + formatCapacity(stadium.getCapacity()) + " seats"
+                            + (next == null ? "" : "  •  next " + next.getDate().format(DATE_FORMATTER)),
+                    stadium.getName()));
+        }
+        if (q.isEmpty()) {
+            return suggestions;
+        }
+        // Teams and artists hosted at the venue are useful shortcuts too.
+        for (String name : distinctTeamsAndArtists(q)) {
+            suggestions.add(new Suggestion(name, "Team or artist appearing at a venue", name));
+        }
+        if (suggestions.isEmpty()) {
+            return suggestions;
+        }
+        suggestions.add(new Suggestion(venues + (venues == 1 ? " venue matches" : " venues match"),
+                "Press Enter to see the full list", null));
+        return suggestions;
+    }
+
+    private List<Suggestion> eventSuggestions(String query) {
+        String q = query == null ? "" : query.trim().toLowerCase(Locale.ENGLISH);
+        List<Suggestion> suggestions = new ArrayList<>();
+        Stadium stadium = selectedStadium;
+        List<StadiumEvent> events = stadium == null
+                ? StadiumData.getEvents() : StadiumData.getEvents(stadium.getId());
+        int matches = 0;
+        for (StadiumEvent event : events) {
+            if (!q.isEmpty() && !event.searchableText().contains(q)
+                    && (stadium == null || !stadium.searchableText().contains(q))) {
+                continue;
+            }
+            matches++;
+            Stadium home = StadiumData.getStadium(event.getStadiumId());
+            suggestions.add(new Suggestion(event.getHeadline(),
+                    (home == null ? "" : home.getName() + "  •  ")
+                            + event.getDate().format(DATE_FORMATTER) + "  •  "
+                            + event.getStartTime().format(TIME_FORMATTER),
+                    event.getHeadline()));
+        }
+        if (!q.isEmpty()) {
+            for (String name : distinctTeamsAndArtists(q)) {
+                suggestions.add(new Suggestion(name, "Team or artist", name));
+            }
+        }
+        if (suggestions.isEmpty()) {
+            return suggestions;
+        }
+        suggestions.add(new Suggestion(matches + (matches == 1 ? " event matches" : " events match"),
+                "Press Enter to see the full list", null));
+        return suggestions;
+    }
+
+    private List<Suggestion> bookingSuggestions(String query) {
+        String q = query == null ? "" : query.trim().toLowerCase(Locale.ENGLISH);
+        List<Suggestion> suggestions = new ArrayList<>();
+        int matches = 0;
+        for (Booking booking : bookingService.getBookings()) {
+            if (!q.isEmpty() && !bookingSearchText(booking).contains(q)) {
+                continue;
+            }
+            matches++;
+            Stadium stadium = StadiumData.getStadium(booking.getStadiumId());
+            suggestions.add(new Suggestion(booking.getReference() + "  •  " + booking.getEvent(),
+                    (stadium == null ? "" : stadium.getName() + "  •  ")
+                            + booking.getSeatDisplay() + "  •  " + booking.getStatus().name(),
+                    booking.getReference()));
+        }
+        if (suggestions.isEmpty()) {
+            return suggestions;
+        }
+        suggestions.add(new Suggestion(matches + (matches == 1 ? " booking matches" : " bookings match"),
+                "Press Enter to see the full list", null));
+        return suggestions;
+    }
+
+    /** Distinct team and artist names in the dataset that contain the query. */
+    private List<String> distinctTeamsAndArtists(String query) {
+        List<String> names = new ArrayList<>();
+        for (StadiumEvent event : StadiumData.getEvents()) {
+            for (String name : List.of(
+                    event.getTeamOne() == null ? "" : event.getTeamOne(),
+                    event.getTeamTwo() == null ? "" : event.getTeamTwo(),
+                    event.getArtist() == null ? "" : event.getArtist())) {
+                if (name.isEmpty() || names.contains(name)) {
+                    continue;
+                }
+                if (name.toLowerCase(Locale.ENGLISH).contains(query)) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
     }
 
     private static final class SearchField extends JTextField {
