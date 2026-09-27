@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -142,6 +143,122 @@ public class BookingService {
             return 0.95;
         }
         return 0.70;
+    }
+
+    /**
+     * Spreads a reservation across the four seating sections instead of letting a
+     * single booking take every seat from one stand.
+     *
+     * <p>Seats are dealt round-robin through sections A to D, and within a section
+     * the best seat still free is taken: the front row first, then the lowest free
+     * seat number. Seats the customer already chose are kept, so this only fills in
+     * the sections that would otherwise be left empty.
+     *
+     * @param requested the seats the customer picked
+     * @return the final seat list, spread across the sections
+     */
+    public List<Seat> allocateSpreadSeats(List<Seat> requested) {
+        if (requested == null || requested.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Stadium stadium = stadiumFor(activeEvent);
+        List<SeatSection> sections = stadium.getSections();
+        Map<String, Integer> targets = spreadTargets(sections.size(), requested.size());
+
+        Map<String, List<Seat>> chosen = new LinkedHashMap<>();
+        for (SeatSection section : sections) {
+            chosen.put(section.getId(), new ArrayList<>());
+        }
+        // Keep the customer's own picks first, within the per-section targets.
+        for (Seat seat : requested) {
+            String sectionId = seat.getKey().getSection();
+            List<Seat> bucket = chosen.get(sectionId);
+            int target = targets.getOrDefault(sectionId, 0);
+            if (bucket != null && bucket.size() < target) {
+                bucket.add(seat);
+            }
+        }
+        for (SeatSection section : sections) {
+            List<Seat> bucket = chosen.get(section.getId());
+            int target = targets.getOrDefault(section.getId(), 0);
+            bucket.addAll(nextFreeSeats(section, target - bucket.size(), List.of()));
+        }
+
+        List<Seat> allocation = new ArrayList<>();
+        for (SeatSection section : sections) {
+            allocation.addAll(chosen.get(section.getId()));
+        }
+        if (allocation.size() < requested.size()) {
+            // Not enough free seats to spread; top up from anywhere still free.
+            allocation.addAll(nextFreeSeats(stadium, requested.size() - allocation.size(),
+                    allocation));
+        }
+        allocation.sort(Comparator.comparing(seat -> seat.getKey()));
+        return allocation;
+    }
+
+    /**
+     * Divides {@code count} seats between the sections as evenly as possible,
+     * giving the earlier sections any remainder.
+     */
+    private Map<String, Integer> spreadTargets(int sectionCount, int count) {
+        Map<String, Integer> targets = new LinkedHashMap<>();
+        if (sectionCount <= 0) {
+            return targets;
+        }
+        int base = count / sectionCount;
+        int remainder = count % sectionCount;
+        for (int index = 0; index < sectionCount; index++) {
+            targets.put(String.valueOf((char) ('A' + index)),
+                    base + (index < remainder ? 1 : 0));
+        }
+        return targets;
+    }
+
+    /**
+     * Returns up to {@code count} free seats in a section, best first: the front
+     * row, then the lowest seat number.
+     */
+    private List<Seat> nextFreeSeats(SeatSection section, int count, List<Seat> already) {
+        List<Seat> found = new ArrayList<>();
+        if (section == null || count <= 0) {
+            return found;
+        }
+        for (int row = 1; row <= section.getRows() && found.size() < count; row++) {
+            for (int number = 1; number <= section.getSeatsPerRow() && found.size() < count; number++) {
+                SeatKey key = new SeatKey(section.getId(), row, number);
+                if (isSeatSelectable(key) && !containsSeat(already, key)) {
+                    Seat seat = seatInventory.get(key);
+                    if (seat != null) {
+                        found.add(seat);
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    private List<Seat> nextFreeSeats(Stadium stadium, int count, List<Seat> already) {
+        List<Seat> found = new ArrayList<>();
+        if (stadium == null || count <= 0) {
+            return found;
+        }
+        for (SeatSection section : stadium.getSections()) {
+            if (found.size() >= count) {
+                break;
+            }
+            found.addAll(nextFreeSeats(section, count - found.size(), already));
+        }
+        return found;
+    }
+
+    private boolean containsSeat(List<Seat> seats, SeatKey key) {
+        for (Seat seat : seats) {
+            if (seat.getKey().equals(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Human-readable name of the price tier a row falls into. */

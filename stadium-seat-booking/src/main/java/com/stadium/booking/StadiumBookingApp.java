@@ -1543,10 +1543,17 @@ public final class StadiumBookingApp extends JFrame {
             showWarning("Select at least one seat before confirming.");
             return;
         }
+        // A reservation is spread across the four sections so one booking never
+        // takes every seat from a single stand. The dialog shows the final seats.
+        List<Seat> spreadSeats = bookingService.allocateSpreadSeats(selectedSeats);
+        boolean spread = !sameSeats(spreadSeats, selectedSeats);
         String choice = showDialogChoice(this,
-                "Confirm " + selectedSeats.size() + " seat" + (selectedSeats.size() == 1 ? "" : "s")
-                        + " for " + currency(bookingService.getTotalCharge(selectedSeats)) + "?\n\n"
-                        + "Seat subtotal: " + currency(bookingService.totalFor(selectedSeats))
+                "Confirm " + spreadSeats.size() + " seat" + (spreadSeats.size() == 1 ? "" : "s")
+                        + " for " + currency(bookingService.getTotalCharge(spreadSeats)) + "?\n\n"
+                        + "Seats: " + joinSeatNames(spreadSeats) + "\n"
+                        + sectionBreakdown(spreadSeats) + "\n"
+                        + (spread ? "Your seats are spread across the sections.\n\n" : "")
+                        + "Seat subtotal: " + currency(bookingService.totalFor(spreadSeats))
                         + "  •  Booking fee: " + currency(bookingService.getBookingFee()) + "\n"
                         + selectedEvent.getHeadline() + "  •  " + selectedEvent.getWhenLabel(),
                 "Confirm booked seats", JOptionPane.QUESTION_MESSAGE,
@@ -1556,7 +1563,7 @@ public final class StadiumBookingApp extends JFrame {
         }
         try {
             Booking booking = bookingService.book(nameField.getText(), emailField.getText(),
-                    phoneField.getText(), selectedSeats);
+                    phoneField.getText(), spreadSeats);
             seatMapPanel.clearSelection();
             seatMapPanel.refreshStatuses();
             clearContactFields();
@@ -1576,6 +1583,39 @@ public final class StadiumBookingApp extends JFrame {
         } catch (IllegalArgumentException exception) {
             showWarning(exception.getMessage());
         }
+    }
+
+    private boolean sameSeats(List<Seat> first, List<Seat> second) {
+        if (first.size() != second.size()) {
+            return false;
+        }
+        for (int index = 0; index < first.size(); index++) {
+            if (!first.get(index).getKey().equals(second.get(index).getKey())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Lists how the chosen seats divide up between sections A to D. */
+    private String sectionBreakdown(List<Seat> seats) {
+        Map<String, Integer> perSection = new LinkedHashMap<>();
+        for (Seat seat : seats) {
+            perSection.merge(seat.getKey().getSection(), 1, Integer::sum);
+        }
+        if (perSection.size() <= 1) {
+            return "";
+        }
+        StringBuilder text = new StringBuilder("By section:  ");
+        boolean first = true;
+        for (Map.Entry<String, Integer> entry : perSection.entrySet()) {
+            if (!first) {
+                text.append("   ");
+            }
+            text.append(entry.getKey()).append(' ').append(entry.getValue());
+            first = false;
+        }
+        return text.toString();
     }
 
     private void clearContactFields() {
