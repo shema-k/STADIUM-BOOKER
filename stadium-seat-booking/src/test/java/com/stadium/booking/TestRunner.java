@@ -98,6 +98,7 @@ public final class TestRunner {
         BookingToolsTest.register();
         LocaleTest.register();
         OccupancyReportTest.register();
+        KeyboardSeatSelectionTest.register();
         System.exit(summary());
     }
 }

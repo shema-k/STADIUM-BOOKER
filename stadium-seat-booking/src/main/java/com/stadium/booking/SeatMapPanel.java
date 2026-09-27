@@ -14,6 +14,9 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
@@ -143,6 +146,7 @@ final class SeatMapPanel extends JPanel {
                 "Four seating sections. Use the arrow keys to move between seats "
                         + "and Enter to hold one.");
         sectionTabs.setFocusTraversalKeysEnabled(false);
+        installSeatKeyBindings(sectionTabs);
         sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
                 .put(KeyStroke.getKeyStroke("UP"), "stadium.seat.up");
         sectionTabs.getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
@@ -194,6 +198,61 @@ final class SeatMapPanel extends JPanel {
     }
 
     /**
+     * Binds the seat navigation keys on a component that takes focus.
+     *
+     * <p>These are installed on the canvas itself rather than only on the tabbed
+     * pane: the scroll pane wrapping each canvas also wants the arrow keys for
+     * scrolling, and a binding on an ancestor is not reliably reached first.
+     */
+    private void installSeatKeyBindings(javax.swing.JComponent component) {
+        javax.swing.KeyStroke[] moves = {
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_LEFT, 0),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_RIGHT, 0)};
+        String[] moveActions = {ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT};
+        javax.swing.InputMap input = component.getInputMap(javax.swing.JComponent.WHEN_FOCUSED);
+        javax.swing.ActionMap actions = component.getActionMap();
+        for (int index = 0; index < moves.length; index++) {
+            input.put(moves[index], moveActions[index]);
+        }
+        input.put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0),
+                ACTION_HOLD);
+        input.put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_SPACE, 0),
+                ACTION_HOLD);
+        actions.put(ACTION_UP, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveKeyboardCaret(-1, 0);
+            }
+        });
+        actions.put(ACTION_DOWN, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveKeyboardCaret(1, 0);
+            }
+        });
+        actions.put(ACTION_LEFT, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveKeyboardCaret(0, -1);
+            }
+        });
+        actions.put(ACTION_RIGHT, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                moveKeyboardCaret(0, 1);
+            }
+        });
+        actions.put(ACTION_HOLD, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                toggleKeyboardSeat();
+            }
+        });
+    }
+
+    /**
      * Moves the keyboard caret around the seat grid. Arrow keys walk the seats,
      * Enter or Space holds the seat, so booking works without a mouse.
      */
@@ -205,6 +264,10 @@ final class SeatMapPanel extends JPanel {
         keyboardRow = Math.max(1, Math.min(section.getRows(), keyboardRow + rowDelta));
         keyboardNumber = Math.max(1, Math.min(section.getSeatsPerRow(), keyboardNumber + numberDelta));
         announceKeyboardSeat(section);
+        SeatCanvas active = canvases.get(section.getId());
+        if (active != null) {
+            active.repaint();
+        }
         repaint();
     }
 
@@ -457,6 +520,46 @@ final class SeatMapPanel extends JPanel {
         return holdService;
     }
 
+    // ---- Keyboard access, exposed so the behaviour can be tested directly ----
+
+    /** Where the arrow keys currently are. */
+    SeatKey getKeyboardCaret() {
+        SeatSection section = currentSection();
+        return section == null ? null
+                : new SeatKey(section.getId(), keyboardRow, keyboardNumber);
+    }
+
+    /** The seat description last shown to the user, for screen readers. */
+    String getAnnouncedSeat() {
+        return lastSeatValue.getText();
+    }
+
+    /** The canvas for a section, which must be focusable to take key presses. */
+    java.awt.Component getSectionCanvas(String sectionId) {
+        return canvases.get(sectionId);
+    }
+
+    /**
+     * Fires one of the seat navigation actions as if the key had been pressed.
+     * Returns false when the action is not installed.
+     */
+    boolean fireKeyboardAction(String actionKey) {
+        javax.swing.Action action = sectionTabs.getActionMap().get(actionKey);
+        if (action == null) {
+            return false;
+        }
+        action.actionPerformed(new java.awt.event.ActionEvent(this, ActionEvent.ACTION_PERFORMED,
+                actionKey));
+        return true;
+    }
+
+    /** The action keys bound to the seat grid. */
+    static final String ACTION_UP = "stadium.seat.up";
+    static final String ACTION_DOWN = "stadium.seat.down";
+    static final String ACTION_LEFT = "stadium.seat.left";
+    static final String ACTION_RIGHT = "stadium.seat.right";
+    static final String ACTION_HOLD = "stadium.seat.hold";
+
     /** Seconds left on this seat's hold, or 0 when there is none. */
     long holdSecondsRemaining(SeatKey key) {
         return holdService.secondsRemaining(key);
@@ -518,16 +621,42 @@ final class SeatMapPanel extends JPanel {
             this.shape = shape;
             setOpaque(true);
             setBackground(MAP_BACKGROUND);
+            setBorder(BorderFactory.createEmptyBorder());
             setPreferredSize(new Dimension(ROW_LABEL_WIDTH + section.getSeatsPerRow()
                     * (CELL_WIDTH + CELL_GAP) + 24,
                     MAP_TOP + section.getRows() * (CELL_HEIGHT + CELL_GAP) + 24));
             setCursor(Cursor.getDefaultCursor());
+            // Stated explicitly rather than relied on from the JPanel default,
+            // because the whole keyboard path depends on this canvas taking focus.
+            setFocusable(true);
+            setFocusTraversalKeysEnabled(false);
+            getAccessibleContext().setAccessibleName("Seat map, section " + section.getId());
+            getAccessibleContext().setAccessibleDescription(
+                    "Arrow keys move between seats, Enter or Space holds the seat.");
+            installSeatKeyBindings(this);
+            addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    announceKeyboardSeat(section);
+                    repaint();
+                }
+
+                @Override
+                public void focusLost(FocusEvent event) {
+                    repaint();
+                }
+            });
             addMouseListener(new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent event) {
                     SeatCanvas canvas = (SeatCanvas) event.getSource();
                     SeatKey key = canvas.keyAt(event.getX(), event.getY());
                     if (key != null) {
+                        canvas.requestFocusInWindow();
+                        // Keep the keyboard caret on the seat just used, so
+                        // arrowing on from here starts where the pointer left off.
+                        keyboardRow = key.getRow();
+                        keyboardNumber = key.getNumber();
                         canvas.handleClick(key);
                     }
                 }
@@ -693,6 +822,16 @@ final class SeatMapPanel extends JPanel {
                 String number = String.valueOf(key.getNumber());
                 int textWidth = g.getFontMetrics().stringWidth(number);
                 g.drawString(number, x + (CELL_WIDTH - textWidth) / 2, y + 9);
+            }
+            // The keyboard caret is drawn as a dashed ring, so the seat the arrow
+            // keys are on is visible rather than only announced.
+            if (isFocusOwner() && keyboardRow == key.getRow()
+                    && keyboardNumber == key.getNumber()) {
+                g.setColor(new Color(37, 99, 235));
+                g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT,
+                        BasicStroke.JOIN_MITER, 8f, new float[]{3f, 3f}, 0f));
+                g.drawRoundRect(x - 3, y - 3, CELL_WIDTH + 6, CELL_HEIGHT + 6, 6, 6);
+                g.setStroke(new BasicStroke(1f));
             }
             if (hoveredRow == key.getRow() && hoveredNumber == key.getNumber()) {
                 g.setColor(new Color(37, 99, 235, 130));
