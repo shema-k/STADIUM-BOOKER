@@ -79,22 +79,50 @@ import javax.swing.table.TableCellRenderer;
  */
 @SuppressWarnings("serial")
 public final class StadiumBookingApp extends JFrame {
-    private static final Color NAVY = new Color(15, 35, 67);
-    private static final Color NAVY_SOFT = new Color(30, 57, 97);
-    private static final Color BLUE = new Color(37, 99, 235);
-    private static final Color BLUE_DARK = new Color(29, 78, 216);
-    private static final Color PURPLE = new Color(124, 58, 237);
-    private static final Color TEAL = new Color(15, 118, 110);
-    private static final Color SKY = new Color(239, 246, 255);
-    private static final Color PAGE = new Color(244, 247, 251);
-    private static final Color WHITE = Color.WHITE;
-    private static final Color TEXT = new Color(30, 41, 59);
-    private static final Color MUTED = new Color(100, 116, 139);
-    private static final Color BORDER = new Color(219, 228, 239);
-    private static final Color SUCCESS_DARK = new Color(21, 128, 61);
-    private static final Color SUCCESS_FOREGROUND = new Color(21, 128, 61);
-    private static final Color WARNING_FOREGROUND = new Color(180, 83, 9);
-    private static final Color CANCELLED = new Color(120, 130, 143);
+    // These are repainted in place by applyThemeColours() when dark mode is
+    // switched on or off, so the several hundred places that use them need no
+    // change and no second version of themselves.
+    private static Color NAVY;
+    private static Color NAVY_SOFT;
+    private static Color BLUE;
+    private static Color BLUE_DARK;
+    private static Color PURPLE;
+    private static Color TEAL;
+    private static Color SKY;
+    private static Color PAGE;
+    private static Color WHITE;
+    private static Color TEXT;
+    private static Color MUTED;
+    private static Color BORDER;
+    private static Color SUCCESS_DARK;
+    private static Color SUCCESS_FOREGROUND;
+    private static Color WARNING_FOREGROUND;
+    private static Color CANCELLED;
+    private static Color FIELD;
+    private static Color DANGER;
+
+    /** Copies the active palette into the names the screens already use. */
+    private static void applyThemeColours() {
+        Theme.Palette palette = Theme.current();
+        NAVY = palette.header();
+        NAVY_SOFT = palette.headerSoft();
+        BLUE = palette.accent();
+        BLUE_DARK = palette.accentDark();
+        PURPLE = palette.accentDark();
+        TEAL = palette.success();
+        SKY = palette.tableHeader();
+        PAGE = palette.page();
+        WHITE = palette.card();
+        TEXT = palette.text();
+        MUTED = palette.muted();
+        BORDER = palette.border();
+        SUCCESS_DARK = palette.success();
+        SUCCESS_FOREGROUND = palette.success();
+        WARNING_FOREGROUND = palette.warning();
+        CANCELLED = palette.cancelled();
+        FIELD = palette.field();
+        DANGER = palette.danger();
+    }
 
     private static final DateTimeFormatter CREATED_FORMATTER =
             DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH)
@@ -131,6 +159,7 @@ public final class StadiumBookingApp extends JFrame {
     private final DefaultTableModel bookingTableModel;
     private final JTable bookingTable;
     private JComboBox<Messages.Language> languageCombo;
+    private final FeedbackButton darkModeButton = new FeedbackButton("☾  Light");
     private final JButton backNavButton = new FeedbackButton(Messages.get("nav.back"));
     private final JButton stadiumNavButton = new FeedbackButton(Messages.get("nav.venues"));
     private final JButton bookingsNavButton = new FeedbackButton(Messages.get("nav.bookings"));
@@ -164,6 +193,10 @@ public final class StadiumBookingApp extends JFrame {
     private StaffDirectory staffDirectory;
     private StaffSession staffSession;
     private JLabel staffBadge;
+    private JLabel statusHeading;
+    private JPanel statusBar;
+    private JPanel headerPanel;
+    private JPanel root;
     private final String sessionOwner = UUID.randomUUID().toString();
     private JLabel holdCountdownValue;
     private String ledgerReturnScreen = "directory";
@@ -182,6 +215,9 @@ public final class StadiumBookingApp extends JFrame {
 
     public StadiumBookingApp() {
         super("Stadium Select");
+        // Colours have to be in place before the first screen is painted.
+        ThemePreference.restore();
+        applyThemeColours();
         directorySearchTimer.setRepeats(false);
         liveSearchTimer.setRepeats(false);
         // Bookings and staff accounts live in one database, so a single Database
@@ -236,7 +272,49 @@ public final class StadiumBookingApp extends JFrame {
         setMinimumSize(new Dimension(1120, 740));
         setSize(1320, 900);
         setLocationRelativeTo(null);
-        getContentPane().setBackground(PAGE);
+        rethemeChrome();
+    }
+
+    /**
+     * Repaints the window furniture that is built once and lives outside any
+     * screen: the frame, the page host and the status bar. Without this the light
+     * margins and status bar stayed light after dark mode was switched on.
+     */
+    private void rethemeChrome() {
+        if (getContentPane() != null) {
+            getContentPane().setBackground(PAGE);
+        }
+        if (root != null) {
+            root.setBackground(PAGE);
+            root.setBorder(BorderFactory.createLineBorder(BORDER));
+        }
+        if (contentHost != null) {
+            contentHost.setBackground(PAGE);
+        }
+        if (statusBar != null) {
+            statusBar.setBackground(WHITE);
+            statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER));
+        }
+        if (statusHeading != null) {
+            statusHeading.setForeground(MUTED);
+        }
+        if (statusValue != null) {
+            statusValue.setForeground(SUCCESS_DARK);
+        }
+        if (headerPanel != null) {
+            headerPanel.setBackground(NAVY);
+        }
+        for (JTextField field : new JTextField[]{stadiumSearchField, eventSearchField,
+                bookingSearchField, liveSearchField, nameField, emailField, phoneField}) {
+            if (field == null) {
+                continue;
+            }
+            field.setForeground(TEXT);
+            field.setBackground(field == stadiumSearchField || field == eventSearchField
+                    || field == bookingSearchField || field == liveSearchField
+                    ? FIELD : FIELD);
+            field.setCaretColor(BLUE);
+        }
     }
 
     private void installSearchListeners() {
@@ -276,6 +354,7 @@ public final class StadiumBookingApp extends JFrame {
     private void buildShell() {
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(PAGE);
+        this.root = root;
         root.add(buildHeader(), BorderLayout.NORTH);
         contentHost.setBackground(PAGE);
         contentHost.setBorder(new EmptyBorder(0, 24, 0, 24));
@@ -286,6 +365,7 @@ public final class StadiumBookingApp extends JFrame {
 
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout(18, 0));
+        headerPanel = header;
         header.setBackground(NAVY);
         header.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(49, 73, 108)),
@@ -330,6 +410,12 @@ public final class StadiumBookingApp extends JFrame {
         JPanel navigation = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 17));
         navigation.setOpaque(false);
         navigation.add(languageCombo);
+        styleHeaderButton(darkModeButton);
+        darkModeButton.setPreferredSize(new Dimension(96, 30));
+        darkModeButton.addActionListener(event -> toggleDarkMode());
+        describe(darkModeButton, "Dark mode",
+                "Switch the whole application between a light and a dark theme");
+        navigation.add(darkModeButton);
         styleHeaderButton(backNavButton);
         styleHeaderButton(stadiumNavButton);
         styleHeaderButton(bookingsNavButton);
@@ -387,11 +473,13 @@ public final class StadiumBookingApp extends JFrame {
 
     private JPanel buildStatusBar() {
         JPanel status = new JPanel(new BorderLayout());
+        statusBar = status;
         status.setBackground(WHITE);
         status.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER),
                 new EmptyBorder(7, 24, 7, 24)));
         JLabel label = new JLabel("STATUS");
+        statusHeading = label;
         label.setForeground(MUTED);
         label.setFont(label.getFont().deriveFont(Font.BOLD, 10f));
         statusValue.setForeground(SUCCESS_DARK);
@@ -419,6 +507,7 @@ public final class StadiumBookingApp extends JFrame {
         occupancyNavButton.setText(text("nav.occupancy"));
         staffNavButton.setText(text("nav.staff"));
         updateStaffBadge();
+        updateDarkModeButton();
         seatMapPanel.retranslate();
         backNavButton.setText(text("nav.back"));
         stadiumNavButton.setText(text("nav.venues"));
@@ -709,10 +798,17 @@ public final class StadiumBookingApp extends JFrame {
                 + (next == null ? "No events listed" : next.getDateLabel()));
         facts.setForeground(TEXT);
         facts.setFont(facts.getFont().deriveFont(Font.PLAIN, 10f));
+        JButton book = createPrimaryButton(Messages.get("directory.book"));
+        book.setToolTipText("Book seats at " + stadium.getName());
+        book.addActionListener(ignored -> openStadium(stadium));
         JButton open = createOutlineButton(Messages.get("directory.viewDetails"), accent);
-        open.addActionListener(event -> showStadiumDetails(stadium));
+        open.addActionListener(ignored -> showStadiumDetails(stadium));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.setOpaque(false);
+        buttons.add(open);
+        buttons.add(book);
         footer.add(facts, BorderLayout.CENTER);
-        footer.add(open, BorderLayout.EAST);
+        footer.add(buttons, BorderLayout.EAST);
         card.add(footer, BorderLayout.SOUTH);
         // Tapping anywhere on the card opens the venue, not only the button.
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -989,8 +1085,19 @@ public final class StadiumBookingApp extends JFrame {
         // An HTML pane opens showing the bottom of its document, which hid the
         // first lines of the About card. Pin it back to the top once sized.
         pane.setCaretPosition(0);
+        // An HTML pane sizes itself to its longest line, so it has to be pinned to
+        // the viewport width or the text runs off the side instead of wrapping.
+        scroll.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent event) {
+                java.awt.Dimension extent = scroll.getViewport().getExtentSize();
+                pane.setSize(new java.awt.Dimension(extent.width, Short.MAX_VALUE));
+            }
+        });
         SwingUtilities.invokeLater(() -> {
             pane.setCaretPosition(0);
+            java.awt.Dimension extent = scroll.getViewport().getExtentSize();
+            pane.setSize(new java.awt.Dimension(extent.width, Short.MAX_VALUE));
             scroll.getViewport().setViewPosition(new java.awt.Point(0, 0));
         });
         return scroll;
@@ -1191,6 +1298,15 @@ public final class StadiumBookingApp extends JFrame {
         return trimmed + "…";
     }
 
+    /**
+     * A colour as a CSS hex string. getRGB() includes the alpha byte, so it cannot
+     * be used directly: it produced eight digits and Color.decode rejected it.
+     */
+    private static String hex(Color colour) {
+        return String.format(Locale.ROOT, "#%02x%02x%02x",
+                colour.getRed(), colour.getGreen(), colour.getBlue());
+    }
+
     /** A short wrapped line, pinned left, for the block beside the picture. */
     private JLabel sideText(String html, String colour, float size) {
         JLabel label = new JLabel("<html><div style='width:560px'>" + html + "</div></html>");
@@ -1204,15 +1320,267 @@ public final class StadiumBookingApp extends JFrame {
     private JPanel buildDetailsActions(Stadium stadium) {
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
         actions.setOpaque(false);
-        JButton schedule = createPrimaryButton("See the schedule and book seats");
+        JButton schedule = createPrimaryButton(Messages.get("directory.bookAt"));
+        schedule.setToolTipText("Choose a date and event at " + stadium.getName());
         schedule.addActionListener(event -> openStadium(stadium));
         actions.add(schedule);
+        JButton details = createSecondaryButton(Messages.get("directory.allEvents"));
+        details.addActionListener(event -> showStadiumDetails(stadium));
+        actions.add(details);
         JButton ledger = createSecondaryButton("See seats already booked here");
         ledger.addActionListener(event -> {
             selectedStadium = stadium;
             showSeatLedger();
         });
         actions.add(ledger);
+        return actions;
+    }
+
+    // ---------------------------------------------------------------------
+    // Event details
+    // ---------------------------------------------------------------------
+
+    /**
+     * Everything about one event, with the way to book it.
+     *
+     * <p>Reached by tapping an event in the venue schedule, in the live schedules,
+     * or in the list on a venue's details page. Choosing an event used to go
+     * straight to the seat map, which left nowhere to read what the event actually
+     * was before committing to it.
+     */
+    private void showEventDetails(StadiumEvent event) {
+        if (event == null) {
+            return;
+        }
+        currentScreen = "event-details";
+        selectedEvent = event;
+        Stadium stadium = StadiumData.getStadium(event.getStadiumId());
+        setHeader(event.getHeadline(),
+                stadium.getName() + "  •  " + event.getType().getLabel());
+        contentHost.removeAll();
+        contentHost.add(buildEventDetailsContent(event), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus(event.getHeadline());
+    }
+
+    private JPanel buildEventDetailsContent(StadiumEvent event) {
+        Stadium stadium = StadiumData.getStadium(event.getStadiumId());
+        boolean open = bookingService.isBookingOpen(event);
+        JPanel page = new JPanel(new BorderLayout(0, 12));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(16, 0, 20, 0));
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        top.setOpaque(false);
+        JButton back = createOutlineButton("\u2190 Back to the schedule", BLUE);
+        back.addActionListener(event2 -> goBackToScheduleFor(stadium));
+        top.add(back);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(false);
+        row.add(buildEventHeroCard(stadium, event, open), BorderLayout.WEST);
+        row.add(buildEventFactsCard(stadium, event, open), BorderLayout.CENTER);
+        JPanel side = new JPanel(new BorderLayout(0, 12));
+        side.setOpaque(false);
+        side.add(buildEventPriceCard(stadium, event), BorderLayout.NORTH);
+        side.add(buildEventNoticesCard(stadium, event), BorderLayout.CENTER);
+        side.setPreferredSize(new Dimension(360, 100));
+        row.add(side, BorderLayout.EAST);
+        page.add(row, BorderLayout.CENTER);
+        page.add(buildEventActions(event, open), BorderLayout.SOUTH);
+        return page;
+    }
+
+    private JButton goBackToScheduleFor(Stadium stadium) {
+        JButton back = createOutlineButton("\u2190 Back to the schedule", BLUE);
+        back.addActionListener(ignored -> openStadium(stadium));
+        return back;
+    }
+
+    /** The event headline over the venue's own plan, so it is recognisable at a glance. */
+    private JPanel buildEventHeroCard(Stadium stadium, StadiumEvent event, boolean open) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(10, 10, 10, 10)));
+        card.setPreferredSize(new Dimension(470, 100));
+
+        StadiumPhotoPanel picture = new StadiumPhotoPanel(stadium);
+        JPanel pictureBox = new JPanel(new BorderLayout());
+        pictureBox.setOpaque(false);
+        pictureBox.add(picture, BorderLayout.CENTER);
+        card.add(pictureBox, BorderLayout.CENTER);
+        return card;
+    }
+
+    /**
+     * Who is playing and what it is. One HTML block rather than separate labels,
+     * because a long fixture name is wider than the card and a JLabel will not
+     * wrap it however wide a div is asked to be.
+     */
+    private JPanel buildEventFactsCard(Stadium stadium, StadiumEvent event, boolean open) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 16, 14, 16)));
+
+        String accent = hex(open ? BLUE_DARK : DANGER);
+        StringBuilder html = new StringBuilder("<html><body style='font-family:SansSerif; margin:0;'>");
+        html.append("<div style='font-size:10px; font-weight:bold; color:").append(accent)
+                .append(";'>").append(event.getType().getLabel().toUpperCase(Locale.ENGLISH))
+                .append("</div>");
+        html.append("<div style='font-size:19px; font-weight:bold; color:").append(hex(TEXT))
+                .append("; margin-top:4px;'>").append(event.getHeadline()).append("</div>");
+        html.append("<div style='font-size:11px; color:").append(hex(MUTED))
+                .append("; margin-top:3px;'>").append(stadium.getName()).append(" &bull; ")
+                .append(stadium.getLocation()).append("</div>");
+        if (event.isGame() && event.getSport() != null) {
+            html.append("<div style='font-size:11px; color:#475569; margin-top:12px;'>")
+                    .append("<b>Sport:</b> ").append(event.getSport())
+                    .append(" &nbsp;&bull;&nbsp; <b>Home:</b> ").append(event.getTeamOne())
+                    .append(" &nbsp;&bull;&nbsp; <b>Away:</b> ").append(event.getTeamTwo())
+                    .append("</div>");
+        } else if (event.getArtist() != null) {
+            html.append("<div style='font-size:11px; color:#475569; margin-top:12px;'>")
+                    .append("<b>Artist:</b> ").append(event.getArtist()).append("</div>");
+        }
+        html.append("<div style='font-size:11px; color:#475569; margin-top:8px;'>")
+                .append(event.getDescription()).append("</div>");
+        html.append("</body></html>");
+        card.add(htmlScroll(html.toString(), 11f), BorderLayout.CENTER);
+        return card;
+    }
+
+    /** The numbers a customer checks before booking: when, by when, and how full. */
+    private JPanel buildEventPriceCard(Stadium stadium, StadiumEvent event) {
+        boolean open = bookingService.isBookingOpen(event);
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+
+        JLabel title = new JLabel("Before you book");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        card.add(title, BorderLayout.NORTH);
+
+        double front = cheapestSeatPrice(event, true);
+        double back = cheapestSeatPrice(event, false);
+        int total = bookingService.getTotalSeatCount(event);
+        int taken = bookingService.getBookedSeatKeys(event).size();
+        double vacancy = bookingService.getVacancyPercentage(event);
+
+        StringBuilder html = new StringBuilder("<html><body style='font-family:SansSerif; margin:0;'>");
+        row(html, "Date", Messages.dateLabel(event.getDate()));
+        row(html, "Starts", event.getTimeLabel());
+        row(html, "Doors", event.getDoorsLabel());
+        row(html, "Book by", event.getBookingDeadlineLabel());
+        row(html, "Seats", String.valueOf(total));
+        row(html, "From", BookingService.formatMoney(back));
+        row(html, "Best seats", BookingService.formatMoney(front)
+                + " in section A row 1");
+        row(html, "Booking fee", BookingService.formatMoney(BookingService.BOOKING_FEE)
+                + " per reservation");
+        html.append("<p style='margin:8px 0 0 0; font-size:11px; color:")
+                .append(vacancy <= 10.0 ? "#b45309" : "#15803d").append(";'>")
+                .append(String.format(Locale.US, "%.3f%% of seats still vacant", vacancy))
+                .append("<br>").append(String.valueOf(taken)).append(" of ")
+                .append(String.valueOf(total)).append(" seats already sold.</p>");
+        if (!open) {
+            html.append("<p style='margin:8px 0 0 0; font-size:11px; color:#b91c1c;'><b>")
+                    .append("This event cannot be booked.</b><br>")
+                    .append(bookingService.getBookingRestrictionMessage(event))
+                    .append("</p>");
+        }
+        html.append("</body></html>");
+        card.add(htmlScroll(html.toString(), 11f), BorderLayout.CENTER);
+        return card;
+    }
+
+    private void row(StringBuilder html, String heading, String value) {
+        html.append("<div style='margin-bottom:4px;'>")
+                .append("<span style='color:#64748b; font-size:10px;'>").append(heading)
+                .append("</span>  ")
+                .append("<span style='color:#1e293b; font-size:11px;'>").append(value)
+                .append("</span></div>");
+    }
+
+    /** The cheapest and dearest seat for this event, priced the way the map prices. */
+    private double cheapestSeatPrice(StadiumEvent event, boolean front) {
+        double lowest = Double.MAX_VALUE;
+        double highest = 0;
+        for (SeatSection section : StadiumData.getStadium(event.getStadiumId()).getSections()) {
+            int row = front ? 1 : section.getRows();
+            double price = bookingService.getSeatPrice(event,
+                    new SeatKey(section.getId(), row, 1));
+            lowest = Math.min(lowest, price);
+            highest = Math.max(highest, price);
+        }
+        return front ? highest : (lowest == Double.MAX_VALUE ? 0 : lowest);
+    }
+
+    /** Notices that stop this event being booked, or the empty state if none do. */
+    private JPanel buildEventNoticesCard(Stadium stadium, StadiumEvent event) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+
+        List<StadiumAnnouncement> notices = StadiumData.getAnnouncements(stadium.getId()).stream()
+                .filter(notice -> notice.getEventId() == null
+                        || notice.getEventId().isEmpty()
+                        || notice.getEventId().equals(event.getId()))
+                .collect(java.util.stream.Collectors.toList());
+
+        JLabel title = new JLabel(notices.isEmpty() ? "No notices" : "Notices for this event");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        card.add(title, BorderLayout.NORTH);
+
+        StringBuilder html = new StringBuilder("<html><body style='font-family:SansSerif; margin:0;'>");
+        if (notices.isEmpty()) {
+            html.append("<div style='color:#64748b; font-size:11px;'>Nothing has been posted "
+                    + "about this event. The venue's other notices are on its details page."
+                    + "</div>");
+        } else {
+            for (StadiumAnnouncement notice : notices) {
+                // Only a blocking notice is shown in the alarm colour.
+                Color colour = notice.getType().isBlocking() ? DANGER : new Color(71, 85, 105);
+                html.append("<div style='margin-bottom:7px; font-size:10px; color:")
+                        .append(hex(colour)).append(";'>")
+                        .append("<b>").append(notice.getTitle()).append("</b><br>")
+                        .append(notice.getMessage()).append("</div>");
+            }
+        }
+        html.append("</body></html>");
+        card.add(htmlScroll(html.toString(), 11f), BorderLayout.CENTER);
+        return card;
+    }
+
+    /** The way to book, or the reason it cannot be booked. */
+    private JPanel buildEventActions(StadiumEvent event, boolean open) {
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        actions.setOpaque(false);
+        if (open) {
+            JButton book = createPrimaryButton("Book seats for this event");
+            book.addActionListener(ignored -> openEvent(event));
+            actions.add(book);
+        } else {
+            JLabel closed = new JLabel(bookingService.getBookingRestrictionMessage(event));
+            closed.setForeground(DANGER);
+            closed.setFont(closed.getFont().deriveFont(Font.BOLD, 11f));
+            actions.add(closed);
+        }
+        JButton venue = createSecondaryButton("About "
+                + StadiumData.getStadium(event.getStadiumId()).getName());
+        venue.addActionListener(ignored -> showStadiumDetails(
+                StadiumData.getStadium(event.getStadiumId())));
+        actions.add(venue);
+        JButton schedules = createSecondaryButton("See all live schedules");
+        schedules.addActionListener(ignored -> showLiveSchedules());
+        actions.add(schedules);
         return actions;
     }
 
@@ -1627,6 +1995,10 @@ public final class StadiumBookingApp extends JFrame {
         return "Booking stops in " + event.getCountdownLabel();
     }
 
+    /**
+     * The label on an event's button. The countdown refreshes this every second,
+     * so the wording has to live here or it gets overwritten each tick.
+     */
     private String eventActionText(StadiumEvent event) {
         StadiumAnnouncement blocking = bookingService.getBlockingAnnouncement(event);
         if (blocking != null) {
@@ -1640,7 +2012,7 @@ public final class StadiumBookingApp extends JFrame {
         if (!event.isBookingOpen()) {
             return "Booking closed";
         }
-        return event.isGame() ? "Choose game" : "Choose concert";
+        return "Details and booking";
     }
 
     /** Shows how long the customer's held seats stay reserved for them. */
@@ -1673,7 +2045,9 @@ public final class StadiumBookingApp extends JFrame {
         for (Map.Entry<JButton, StadiumEvent> entry : eventActionButtons.entrySet()) {
             StadiumEvent event = entry.getValue();
             entry.getKey().setText(eventActionText(event));
-            entry.getKey().setEnabled(bookingService.isBookingOpen(event));
+            // Left enabled on purpose: a cancelled or postponed event still has a
+            // details page, and that page is where the reason is explained. The
+            // label beside it already says what is wrong.
         }
         if (selectedEvent != null) {
             bookingCountdownValue.setText("Booking stops in " + selectedEvent.getCountdownLabel());
@@ -1695,6 +2069,17 @@ public final class StadiumBookingApp extends JFrame {
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 16, 14, 16)));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150));
+        // Tapping anywhere on an event opens its details, where the booking button is.
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.setToolTipText("Open the details for " + event.getHeadline());
+        card.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent click) {
+                if (SwingUtilities.isLeftMouseButton(click)) {
+                    showEventDetails(event);
+                }
+            }
+        });
 
         JPanel time = new JPanel(new GridBagLayout());
         time.setOpaque(false);
@@ -1765,16 +2150,11 @@ public final class StadiumBookingApp extends JFrame {
         actionConstraints.gridy = 1;
         actionConstraints.insets = new Insets(3, 0, 0, 0);
         action.add(deadline, actionConstraints);
-        JButton choose = createPrimaryButton(eventActionText(event));
-        choose.setEnabled(open);
+        // A closed event is still worth opening: its details page explains why,
+        // where the straight-to-seat-map path used to just refuse.
+        JButton choose = createPrimaryButton(open ? "Details and booking" : "Why it is closed");
         eventActionButtons.put(choose, event);
-        choose.addActionListener(ignored -> {
-            if (showVenue) {
-                openEventFromSchedule(event);
-            } else {
-                openEvent(event);
-            }
-        });
+        choose.addActionListener(ignored -> showEventDetails(event));
         actionConstraints.gridy = 2;
         actionConstraints.insets = new Insets(7, 0, 0, 0);
         action.add(choose, actionConstraints);
@@ -3500,7 +3880,7 @@ public final class StadiumBookingApp extends JFrame {
     private void styleTextField(JTextField field) {
         field.setFont(field.getFont().deriveFont(Font.PLAIN, 13f));
         field.setForeground(TEXT);
-        field.setBackground(new Color(249, 251, 255));
+        field.setBackground(FIELD);
         field.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDER), new EmptyBorder(8, 10, 8, 10)));
         field.setPreferredSize(new Dimension(180, 37));
@@ -3691,8 +4071,8 @@ public final class StadiumBookingApp extends JFrame {
     private JButton createPrimaryButton(String text) {
         JButton button = new FeedbackButton(text);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
-        button.setForeground(WHITE);
         button.setBackground(BLUE);
+        button.setForeground(Theme.current().onAccent());
         button.setFocusPainted(false);
         button.setOpaque(true);
         button.setBorder(BorderFactory.createCompoundBorder(
@@ -4058,6 +4438,139 @@ public final class StadiumBookingApp extends JFrame {
                 return true;
             }
             showWarning(refusal);
+        }
+    }
+
+    /** The label on the dark mode button, which also reads as its current state. */
+    private void updateDarkModeButton() {
+        if (darkModeButton == null) {
+            return;
+        }
+        boolean dark = Theme.isDark();
+        darkModeButton.setText(dark ? "\u263D  Dark" : "\u263E  Light");
+        darkModeButton.setToolTipText(dark
+                ? "Switch to the light theme"
+                : "Switch to the dark theme");
+        darkModeButton.getAccessibleContext().setAccessibleDescription(
+                dark ? "Currently the dark theme. Activate for the light theme."
+                        : "Currently the light theme. Activate for the dark theme.");
+    }
+
+    /**
+     * Switches the whole application between the light and dark themes.
+     *
+     * <p>Every screen is built from the palette, so the one on show is simply built
+     * again in the new colours rather than each screen being taught to repaint
+     * itself. The choice is remembered for next time.
+     */
+    private void toggleDarkMode() {
+        boolean dark = !Theme.isDark();
+        Theme.setDark(dark);
+        applyThemeColours();
+        ThemePreference.save();
+        applySystemDefaults();
+        updateDarkModeButton();
+        rethemeChrome();
+        rebuildCurrentScreen();
+        showStatus(dark ? "Dark mode on" : "Light mode on");
+    }
+
+    /** Applies the palette to the Swing defaults that dialogs and tables pick up. */
+    private void applySystemDefaults() {
+        Theme.Palette palette = Theme.current();
+        javax.swing.UIManager.put("Panel.background", palette.card());
+        javax.swing.UIManager.put("OptionPane.background", palette.card());
+        javax.swing.UIManager.put("OptionPane.messageForeground", palette.text());
+        javax.swing.UIManager.put("Label.foreground", palette.text());
+        javax.swing.UIManager.put("TextField.background", palette.field());
+        javax.swing.UIManager.put("TextField.foreground", palette.text());
+        javax.swing.UIManager.put("TextField.caretForeground", palette.text());
+        javax.swing.UIManager.put("TextField.border",
+                javax.swing.BorderFactory.createLineBorder(palette.fieldBorder()));
+        javax.swing.UIManager.put("PasswordField.background", palette.field());
+        javax.swing.UIManager.put("PasswordField.foreground", palette.text());
+        javax.swing.UIManager.put("PasswordField.caretForeground", palette.text());
+        javax.swing.UIManager.put("ComboBox.background", palette.field());
+        javax.swing.UIManager.put("ComboBox.foreground", palette.text());
+        javax.swing.UIManager.put("ComboBox.selectionBackground", palette.accent());
+        javax.swing.UIManager.put("ComboBox.selectionForeground", palette.onAccent());
+        javax.swing.UIManager.put("Table.background", palette.card());
+        javax.swing.UIManager.put("Table.foreground", palette.text());
+        javax.swing.UIManager.put("Table.gridColor", palette.tableGrid());
+        javax.swing.UIManager.put("TableHeader.background", palette.tableHeader());
+        javax.swing.UIManager.put("TableHeader.foreground", palette.accentDark());
+        javax.swing.UIManager.put("Table.selectionBackground", palette.accent());
+        javax.swing.UIManager.put("Table.selectionForeground", palette.onAccent());
+        javax.swing.UIManager.put("ScrollBar.background", palette.page());
+        javax.swing.UIManager.put("Viewport.background", palette.page());
+        javax.swing.UIManager.put("TabbedPane.background", palette.page());
+        javax.swing.UIManager.put("TabbedPane.foreground", palette.text());
+        javax.swing.UIManager.put("TabbedPane.selected", palette.card());
+        javax.swing.UIManager.put("ToolTip.background", palette.header());
+        javax.swing.UIManager.put("ToolTip.foreground", Color.WHITE);
+    }
+
+    /**
+     * Builds whichever screen is on show again, so the new palette takes effect
+     * everywhere and not only on the screen built after the switch.
+     */
+    private void rebuildCurrentScreen() {
+        if (seatMapPanel != null) {
+            seatMapPanel.applyTheme();
+        }
+        StadiumPhotoPanel.forgetCachedPhotographs();
+        contentHost.removeAll();
+        switch (currentScreen == null ? "directory" : currentScreen) {
+            case "booking":
+                if (selectedEvent != null && selectedStadium != null) {
+                    bookingService.selectEvent(selectedEvent);
+                    setHeader(Messages.get("booking.title"),
+                            selectedStadium.getName() + "  \u2022  " + selectedEvent.getHeadline());
+                    contentHost.add(buildBookingScreen(), BorderLayout.CENTER);
+                }
+                break;
+            case "stadium":
+                if (selectedStadium != null) {
+                    setHeader(selectedStadium.getName(),
+                            selectedStadium.getLocation() + "  \u2022  " + selectedStadium.getVenueType());
+                    contentHost.add(buildStadiumDashboard(selectedStadium), BorderLayout.CENTER);
+                }
+                break;
+            case "stadium-details":
+                if (selectedStadium != null) {
+                    contentHost.add(buildStadiumDetailsContent(selectedStadium,
+                                    StadiumDetails.of(selectedStadium, bookingService)),
+                            BorderLayout.CENTER);
+                }
+                break;
+            case "event-details":
+                if (selectedEvent != null) {
+                    contentHost.add(buildEventDetailsContent(selectedEvent), BorderLayout.CENTER);
+                }
+                break;
+            case "bookings":
+                contentHost.add(buildBookingsContent(), BorderLayout.CENTER);
+                break;
+            case "schedules":
+                contentHost.add(buildLiveSchedulesContent(), BorderLayout.CENTER);
+                break;
+            case "occupancy":
+                contentHost.add(buildOccupancyContent(), BorderLayout.CENTER);
+                break;
+            case "seat-ledger":
+                contentHost.add(buildSeatLedgerContent(), BorderLayout.CENTER);
+                break;
+            case "staff":
+                contentHost.add(buildStaffContent(), BorderLayout.CENTER);
+                break;
+            default:
+                contentHost.add(buildDirectoryContent(), BorderLayout.CENTER);
+                break;
+        }
+        contentHost.revalidate();
+        contentHost.repaint();
+        if (seatMapPanel != null) {
+            seatMapPanel.refreshStatuses();
         }
     }
 

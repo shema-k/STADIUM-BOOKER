@@ -103,6 +103,7 @@ public final class TestRunner {
         DatabaseProtectionTest.register();
         StadiumDetailsTest.register();
         StadiumDetailsTest.registerPictureSuite();
+        ThemeTest.register();
         System.exit(summary());
     }
 }

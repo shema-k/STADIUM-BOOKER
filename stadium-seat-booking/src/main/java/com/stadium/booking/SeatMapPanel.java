@@ -45,23 +45,59 @@ import javax.swing.SwingConstants;
  */
 @SuppressWarnings("serial")
 final class SeatMapPanel extends JPanel {
-    private static final Color AVAILABLE_BACKGROUND = new Color(232, 241, 255);
-    private static final Color AVAILABLE_FOREGROUND = new Color(28, 55, 90);
-    private static final Color SELECTED_BACKGROUND = new Color(245, 158, 11);
-    private static final Color SELECTED_FOREGROUND = new Color(67, 37, 4);
-    /** Booked seats read as "already taken": rose fill with a deep rose outline. */
-    private static final Color BOOKED_BACKGROUND = new Color(251, 213, 213);
-    private static final Color BOOKED_FOREGROUND = new Color(159, 18, 57);
-    private static final Color CLOSED_BACKGROUND = new Color(239, 229, 218);
-    private static final Color CLOSED_FOREGROUND = new Color(146, 104, 62);
-    private static final Color SEAT_OUTLINE = new Color(166, 181, 201);
-    /** Held by another customer: amber outline with a hatched feel. */
-    private static final Color HELD_BACKGROUND = new Color(254, 243, 199);
-    private static final Color HELD_FOREGROUND = new Color(146, 64, 14);
-    private static final Color MAP_BACKGROUND = new Color(248, 251, 255);
-    private static final Color MAP_BORDER = new Color(185, 201, 222);
-    private static final Color PITCH_GREEN = new Color(222, 242, 231);
-    private static final Color SUCCESS_FOREGROUND = new Color(21, 128, 61);
+    // Repainted in place by applyTheme() so dark mode reaches the seat map without
+    // every seat state being decided twice.
+    private static Color AVAILABLE_BACKGROUND;
+    private static Color AVAILABLE_FOREGROUND;
+    private static Color SELECTED_BACKGROUND;
+    private static Color SELECTED_FOREGROUND;
+    private static Color BOOKED_BACKGROUND;
+    private static Color BOOKED_FOREGROUND;
+    private static Color CLOSED_BACKGROUND;
+    private static Color CLOSED_FOREGROUND;
+    private static Color SEAT_OUTLINE;
+    private static Color HELD_BACKGROUND;
+    private static Color HELD_FOREGROUND;
+    private static Color MAP_BACKGROUND;
+    private static Color MAP_BORDER;
+    private static Color PITCH_GREEN;
+    private static Color SUCCESS_FOREGROUND;
+
+    static {
+        applyColours();
+    }
+
+    private static void applyColours() {
+        Theme.Palette palette = Theme.current();
+        AVAILABLE_BACKGROUND = palette.seatVacant();
+        AVAILABLE_FOREGROUND = palette.seatVacantText();
+        SELECTED_BACKGROUND = palette.seatSelected();
+        SELECTED_FOREGROUND = palette.seatSelectedText();
+        BOOKED_BACKGROUND = palette.seatBooked();
+        BOOKED_FOREGROUND = palette.seatBookedText();
+        CLOSED_BACKGROUND = palette.seatClosed();
+        CLOSED_FOREGROUND = palette.seatClosedText();
+        SEAT_OUTLINE = palette.seatOutline();
+        HELD_BACKGROUND = palette.seatHeld();
+        HELD_FOREGROUND = palette.seatHeldText();
+        MAP_BACKGROUND = palette.mapBackground();
+        MAP_BORDER = palette.mapBorder();
+        PITCH_GREEN = palette.pitch();
+        SUCCESS_FOREGROUND = palette.success();
+    }
+
+    /** Re-reads the palette after the theme changes and repaints the map. */
+    void applyTheme() {
+        applyColours();
+        if (lastSeatValue != null) {
+            lastSeatValue.setForeground(Theme.current().muted());
+        }
+        for (SeatCanvas canvas : canvases.values()) {
+            canvas.setBackground(MAP_BACKGROUND);
+        }
+        revalidate();
+        repaint();
+    }
 
     private static final int CELL_WIDTH = 18;
     private static final int CELL_HEIGHT = 13;

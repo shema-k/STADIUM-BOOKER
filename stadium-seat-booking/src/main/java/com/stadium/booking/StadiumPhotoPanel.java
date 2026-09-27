@@ -185,8 +185,9 @@ public final class StadiumPhotoPanel extends JPanel {
         Color accent = colorOf(stadium.getAccentColor(), new Color(220, 38, 38));
 
         // Ground outside the stadium.
-        g.setPaint(new GradientPaint(0, 0, new Color(226, 232, 240),
-                0, height, new Color(191, 203, 219)));
+        Theme.Palette palette = Theme.current();
+        g.setPaint(new GradientPaint(0, 0, palette.groundTop(),
+                0, height, palette.groundBottom()));
         g.fill(new Rectangle2D.Double(0, 0, width, height));
         paintGlow(g, width, height, accent);
 
@@ -349,9 +350,10 @@ public final class StadiumPhotoPanel extends JPanel {
 
     /** The pitch in the middle: grass, then the markings. */
     private void paintPitch(Graphics2D g, java.awt.Shape inner) {
+        Theme.Palette palette = Theme.current();
         Rectangle2D bounds = inner.getBounds2D();
-        g.setPaint(new GradientPaint(0, (float) bounds.getY(), new Color(34, 120, 62),
-                0, (float) bounds.getMaxY(), new Color(22, 92, 47)));
+        g.setPaint(new GradientPaint(0, (float) bounds.getY(), palette.grassTop(),
+                0, (float) bounds.getMaxY(), palette.grassBottom()));
         g.fill(inner);
         g.setClip(inner);
         double x = bounds.getX();
@@ -467,13 +469,14 @@ public final class StadiumPhotoPanel extends JPanel {
 
     /** The venue name and where the picture came from, on a strip at the foot. */
     private void paintCaption(Graphics2D g, int width, int height) {
+        Theme.Palette palette = Theme.current();
         int strip = 42;
-        g.setColor(new Color(2, 6, 23, 196));
+        g.setColor(new Color(2, 6, 23, palette.isDark() ? 216 : 196));
         g.fill(new Rectangle2D.Double(0, height - strip, width, strip));
-        g.setColor(new Color(148, 163, 184));
+        g.setColor(palette.captionText());
         g.setFont(g.getFont().deriveFont(Font.BOLD, 12f));
         g.drawString(clip(g, stadium.getName(), width - 24), 12, height - strip + 16);
-        g.setColor(new Color(203, 213, 225));
+        g.setColor(palette.captionText());
         g.setFont(g.getFont().deriveFont(Font.PLAIN, 9f));
         g.drawString(clip(g, pictureNote, width - 24), 12, height - 6);
     }

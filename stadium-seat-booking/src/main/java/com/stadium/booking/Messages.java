@@ -81,6 +81,9 @@ public final class Messages {
         put(Language.ENGLISH, "directory.venuesMatching", "{0} venues matching your search");
         put(Language.ENGLISH, "directory.open", "Open stadium");
         put(Language.ENGLISH, "directory.viewDetails", "View details");
+        put(Language.ENGLISH, "directory.book", "Book seats");
+        put(Language.ENGLISH, "directory.bookAt", "See the schedule and book seats");
+        put(Language.ENGLISH, "directory.allEvents", "All upcoming events");
         put(Language.ENGLISH, "stadium.upcoming", "Upcoming schedule");
         put(Language.ENGLISH, "stadium.search.hint", "Search teams, artists, sport or date");
         put(Language.ENGLISH, "stadium.subtitle",
@@ -182,6 +185,9 @@ public final class Messages {
         put(Language.LUGANDA, "directory.search.hint", "Shunja ekizimbe, egga, ekizibuBy'obujjuni");
         put(Language.LUGANDA, "directory.open", "Kikikizo");
         put(Language.LUGANDA, "directory.viewDetails", "Lola ebisinga by'obuddwa");
+        put(Language.LUGANDA, "directory.book", "Yatandika ebizitansa");
+        put(Language.LUGANDA, "directory.bookAt", "Lola lutundu era yatandika");
+        put(Language.LUGANDA, "directory.allEvents", "Ebiro byonna ebiri");
         put(Language.LUGANDA, "booking.title", "Yatandika ebizitansa");
         put(Language.LUGANDA, "booking.yourDetails", "Ebikwata by'ekisobola");
         put(Language.LUGANDA, "booking.name", "Amalinnya");
@@ -220,6 +226,9 @@ public final class Messages {
         put(Language.SWAHILI, "directory.search.hint", "Tafuta uwanja, mji, timu au msanii");
         put(Language.SWAHILI, "directory.open", "Fungua uwanja");
         put(Language.SWAHILI, "directory.viewDetails", "Angalia maelezo");
+        put(Language.SWAHILI, "directory.book", "Chagua viti");
+        put(Language.SWAHILI, "directory.bookAt", "RUDI ratiba na uchague viti");
+        put(Language.SWAHILI, "directory.allEvents", "Matukio yote yajayo");
         put(Language.SWAHILI, "booking.title", "Viti vyako");
         put(Language.SWAHILI, "booking.yourDetails", "Maelezo yako");
         put(Language.SWAHILI, "booking.name", "Jina");

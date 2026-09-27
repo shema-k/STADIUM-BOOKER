@@ -7,7 +7,14 @@ A professional desktop stadium directory and seat-booking application built with
 ## Features
 
 - Stadium directory with venue information
+- **Book seats** button on every venue card in the directory, and on the venue details page
 - **Stadium details page** on tapping any venue, with everything known about it in one place
+- **Event details page** on tapping any event in the schedule or the live schedules, with the
+  booking option on it
+- An event's details page says date, start, doors, booking deadline, seat count, price from
+  and best available, the booking fee, current vacancy, and any notice affecting it
+- A cancelled or postponed event still opens its details page, which is where the reason is
+  explained, rather than the button simply refusing
 - A picture of every venue: a real photograph if one is supplied, otherwise the venue's own
   aerial seating plan drawn from its real shape, sections and colours
 - Details page shows capacity, shape, seat price span, upcoming events, clubs and artists
@@ -67,6 +74,10 @@ A professional desktop stadium directory and seat-booking application built with
   moves the caret there so arrowing on continues from the pointer
 - Accessible names and descriptions on the search fields, customer fields and navigation
 - Interface available in English, Luganda and Swahili, switchable from the header
+- **Dark mode** for every screen, switched from the header and remembered between runs
+- One palette drives the whole interface, so dark mode repaints the seat map, the drawn
+  stadium plans, the tables, the dialogs and the window furniture together
+- Body text, seat states and button labels are contrast-checked in both themes by the tests
 - Named staff accounts with three roles: Manager sees customer contact details, Clerk sees
   bookings and reports but not contact details, Supervisor can only confirm a booking
 - On first run the application creates a manager account with a PIN generated at random and
@@ -97,11 +108,16 @@ A professional desktop stadium directory and seat-booking application built with
 ./run-tests.sh
 ```
 
-One hundred and forty-five tests covering the venue and event data, pricing and booking rules, database
+One hundred and sixty-one tests covering the venue and event data, pricing and booking rules, database
 persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
 the three languages, the occupancy report, keyboard seat selection, staff accounts and
-requiring a database password, and the stadium detail pages and pictures. The runner needs
-nothing but a JDK, so no build tool or network access is required.
+requiring a database password, the stadium detail pages and pictures, and dark mode. The
+runner needs nothing but a JDK, so no build tool or network access is required.
+
+The dark mode tests measure real WCAG contrast rather than eyeballing it. That is how two
+problems were found: white button labels on the dark theme's bright accent were unreadable,
+and the pitch of a drawn stadium plan had been given the seat map's pale colour instead of
+grass.
 
 One of those checks guards a real defect: the detail page had its own copy of the seat
 price curve and was quoting prices the seat map would never charge. It now shares the seat
@@ -208,11 +224,14 @@ java -jar target/stadium-select.jar
 
 ## How to use it
 
-1. Search for a stadium or choose one from the directory cards.
-2. Tap any venue card to open its details page: picture, address, description, the four
-   seating sections with real prices, what is on there, and current vacancy.
-3. Press **See the schedule and book seats** to carry on to the schedule.
-4. Review the stadium information, upcoming schedule, countdown and special notices.
+1. Search for a stadium or choose one from the directory cards. Each card has **View details**
+   and **Book seats**.
+2. Tap anywhere on a venue card to open its details page: picture, address, description, the
+   four seating sections with real prices, what is on there, and current vacancy.
+3. Press **See the schedule and book seats** to carry on to the schedule, or pick an event
+   straight from the details page.
+4. Tap any event to open its details page, then **Book seats for this event** to choose seats.
+5. Review the stadium information, upcoming schedule, countdown and special notices.
 3. Use the date selector and event search bar to find a game or concert.
 4. Open the event to view its sport, teams or artist, date, start time, doors time and booking deadline.
 5. Choose section A, B, C or D and tap a vacant seat. The map shows the exact seat number and price.
@@ -224,6 +243,9 @@ java -jar target/stadium-select.jar
 11. Open **My bookings** to search, review or cancel a reservation. This asks you to sign
     in. On first run the application asks you to create a manager account and shows you a
     random PIN once, which you must change before you can go further.
+
+The **Light** / **Dark** button in the header switches the whole application between themes,
+and the choice is remembered next time you open it.
 
 The **Occupancy** button in the header shows how full every venue is. The **Booked seats**
 button lists every seat already taken, by venue and event.
