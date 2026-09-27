@@ -14,6 +14,9 @@ A professional desktop stadium directory and seat-booking application built with
 - Four seating ends/sides (A, B, C and D) with independent rows
 - Front rows use premium pricing; middle and back rows progressively decrease in price
 - Date-based event schedules for every stadium
+- **Live schedules** view listing every upcoming game and concert across all venues, soonest first
+- Live schedule filters by date, type (games or concerts) and free-text search
+- Cancelled and emergency-affected events are blocked and labelled in the live schedule
 - Search events by team, artist, sport, date or time
 - Game events include the sport and both teams
 - Concert events include the artist and doors time

@@ -112,6 +112,8 @@ public final class StadiumBookingApp extends JFrame {
             new SearchField("Search teams, artists, sport or date");
     private final SearchField bookingSearchField =
             new SearchField("Search reference, stadium, event or status");
+    private final SearchField liveSearchField =
+            new SearchField("Search teams, artists, venues or dates");
     private final JTextField nameField = new JTextField();
     private final JTextField emailField = new JTextField();
     private final JTextField phoneField = new JTextField();
@@ -134,6 +136,10 @@ public final class StadiumBookingApp extends JFrame {
     private LocalDate selectedScheduleDate;
     private List<LocalDate> scheduleDates = new ArrayList<>();
     private List<StadiumEvent> ledgerEventOptions = new ArrayList<>();
+    private JComboBox<String> liveDateCombo;
+    private JComboBox<String> liveTypeCombo;
+    private JPanel liveListHost;
+    private JLabel liveResultLabel;
     private JPanel scheduleListHost;
     private JLabel scheduleResultLabel;
     private JComboBox<String> dateCombo;
@@ -154,11 +160,17 @@ public final class StadiumBookingApp extends JFrame {
         }
     });
     private final Timer countdownTimer = new Timer(60_000, event -> updateCountdownDisplays());
+    private final Timer liveSearchTimer = new Timer(200, event -> {
+        if ("schedules".equals(currentScreen)) {
+            refreshLiveSchedules();
+        }
+    });
 
     public StadiumBookingApp() {
         super("Stadium Select");
         directorySearchTimer.setRepeats(false);
         countdownTimer.setRepeats(true);
+        liveSearchTimer.setRepeats(false);
         bookingService = new BookingService();
         seatMapPanel = new SeatMapPanel(bookingService, this::onSeatToggled,
                 this::updateBookingSummary, this::showStatus);
@@ -208,6 +220,8 @@ public final class StadiumBookingApp extends JFrame {
         new SearchSuggestions(stadiumSearchField, this::stadiumSuggestions);
         new SearchSuggestions(eventSearchField, this::eventSuggestions);
         new SearchSuggestions(bookingSearchField, this::bookingSuggestions);
+        new SearchSuggestions(liveSearchField, this::eventSuggestions);
+        addDocumentListener(liveSearchField, liveSearchTimer::restart);
     }
 
     private void addDocumentListener(JTextField field, Runnable action) {
@@ -360,7 +374,8 @@ public final class StadiumBookingApp extends JFrame {
             } else {
                 showStadiumDirectory();
             }
-        } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)) {
+        } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)
+                || "schedules".equals(currentScreen)) {
             showStadiumDirectory();
         }
     }
@@ -506,16 +521,24 @@ public final class StadiumBookingApp extends JFrame {
         constraints.insets = new Insets(4, 0, 0, 0);
         copy.add(subtitle, constraints);
 
-        JLabel directoryBadge = new JLabel("  LIVE SCHEDULES  ");
-        directoryBadge.setOpaque(true);
-        directoryBadge.setBackground(new Color(219, 234, 254));
-        directoryBadge.setForeground(BLUE_DARK);
-        directoryBadge.setFont(directoryBadge.getFont().deriveFont(Font.BOLD, 10f));
-        directoryBadge.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(191, 219, 254)), new EmptyBorder(9, 4, 9, 4)));
+        // Opens the cross-venue schedule, so it is a real button with the same
+        // hover and press feedback as the rest of the interface.
+        JButton liveSchedules = new FeedbackButton("  LIVE SCHEDULES  ");
+        liveSchedules.setFont(liveSchedules.getFont().deriveFont(Font.BOLD, 10f));
+        liveSchedules.setForeground(BLUE_DARK);
+        liveSchedules.setBackground(new Color(219, 234, 254));
+        liveSchedules.setFocusPainted(false);
+        liveSchedules.setOpaque(true);
+        liveSchedules.setContentAreaFilled(true);
+        liveSchedules.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(191, 219, 254)), new EmptyBorder(9, 8, 9, 8)));
+        liveSchedules.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        liveSchedules.setToolTipText("Browse every upcoming game and concert across all venues");
+        addInteractionFeedback(liveSchedules);
+        liveSchedules.addActionListener(event -> showLiveSchedules());
         JPanel badgeHolder = new JPanel(new GridBagLayout());
         badgeHolder.setOpaque(false);
-        badgeHolder.add(directoryBadge);
+        badgeHolder.add(liveSchedules);
         hero.add(copy, BorderLayout.CENTER);
         hero.add(badgeHolder, BorderLayout.EAST);
         return hero;
@@ -1063,6 +1086,14 @@ public final class StadiumBookingApp extends JFrame {
     }
 
     private JPanel createEventCard(StadiumEvent event) {
+        return createEventCard(event, false);
+    }
+
+    /**
+     * @param showVenue adds the venue name, needed when events from more than
+     *                 one stadium are listed together
+     */
+    private JPanel createEventCard(StadiumEvent event, boolean showVenue) {
         JPanel card = createCard();
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createCompoundBorder(
@@ -1107,7 +1138,12 @@ public final class StadiumBookingApp extends JFrame {
         detailConstraints.gridy = 1;
         detailConstraints.insets = new Insets(3, 0, 0, 0);
         details.add(title, detailConstraints);
-        JLabel eventDetails = new JLabel(event.getEventDetails());
+        String detailText = event.getEventDetails();
+        Stadium venue = showVenue ? StadiumData.getStadium(event.getStadiumId()) : null;
+        if (venue != null) {
+            detailText = detailText + "  •  " + venue.getName() + ", " + venue.getCity();
+        }
+        JLabel eventDetails = new JLabel(detailText);
         eventDetails.setForeground(MUTED);
         eventDetails.setFont(eventDetails.getFont().deriveFont(Font.PLAIN, 11f));
         detailConstraints.gridy = 2;
@@ -1137,12 +1173,261 @@ public final class StadiumBookingApp extends JFrame {
         JButton choose = createPrimaryButton(eventActionText(event));
         choose.setEnabled(open);
         eventActionButtons.put(choose, event);
-        choose.addActionListener(ignored -> openEvent(event));
+        choose.addActionListener(ignored -> {
+            if (showVenue) {
+                openEventFromSchedule(event);
+            } else {
+                openEvent(event);
+            }
+        });
         actionConstraints.gridy = 2;
         actionConstraints.insets = new Insets(7, 0, 0, 0);
         action.add(choose, actionConstraints);
         card.add(action, BorderLayout.EAST);
         return card;
+    }
+
+    // ---------------------------------------------------------------------
+    // Live schedules (cross-venue)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Shows every upcoming game and concert across all venues, soonest first, so
+     * a customer can find something to attend without choosing a stadium first.
+     */
+    private void showLiveSchedules() {
+        currentScreen = "schedules";
+        setHeader("Live schedules", "Every upcoming game and concert across all eleven Ugandan venues.");
+        contentHost.removeAll();
+        contentHost.add(buildLiveSchedulesContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        loadLiveFilters();
+        refreshLiveSchedules();
+        showStatus("Live schedules");
+    }
+
+    private JPanel buildLiveSchedulesContent() {
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(20, 0, 22, 0));
+
+        JPanel top = new JPanel(new BorderLayout(16, 0));
+        top.setOpaque(false);
+
+        JPanel titleBox = new JPanel(new GridBagLayout());
+        titleBox.setOpaque(false);
+        GridBagConstraints backConstraints = new GridBagConstraints();
+        backConstraints.anchor = GridBagConstraints.WEST;
+        JButton back = createOutlineButton("← Back to stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        titleBox.add(back, backConstraints);
+
+        GridBagConstraints titleConstraints = new GridBagConstraints();
+        titleConstraints.gridx = 0;
+        titleConstraints.anchor = GridBagConstraints.WEST;
+        titleConstraints.fill = GridBagConstraints.HORIZONTAL;
+        titleConstraints.weightx = 1;
+        JLabel title = new JLabel("All upcoming events");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 21f));
+        titleConstraints.gridy = 1;
+        titleConstraints.insets = new Insets(7, 0, 0, 0);
+        titleBox.add(title, titleConstraints);
+        JLabel subtitle = new JLabel("Soonest first, across every venue. Pick an event to choose seats.");
+        subtitle.setForeground(MUTED);
+        subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
+        titleConstraints.gridy = 2;
+        titleConstraints.insets = new Insets(3, 0, 0, 0);
+        titleBox.add(subtitle, titleConstraints);
+        top.add(titleBox, BorderLayout.WEST);
+
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        filters.setOpaque(false);
+        JPanel searchWrap = new JPanel(new BorderLayout(0, 3));
+        searchWrap.setOpaque(false);
+        searchWrap.setPreferredSize(new Dimension(320, 56));
+        searchWrap.add(buildSearchBar(liveSearchField, "Search teams, artists, venues or dates"),
+                BorderLayout.CENTER);
+        filters.add(searchWrap);
+        liveDateCombo = new JComboBox<>();
+        liveDateCombo.setPreferredSize(new Dimension(180, 38));
+        liveDateCombo.setBackground(WHITE);
+        liveDateCombo.addActionListener(event -> refreshLiveSchedules());
+        liveTypeCombo = new JComboBox<>(new String[]{"All types", "Games", "Concerts"});
+        liveTypeCombo.setPreferredSize(new Dimension(130, 38));
+        liveTypeCombo.setBackground(WHITE);
+        liveTypeCombo.addActionListener(event -> refreshLiveSchedules());
+        filters.add(labelled("Date", liveDateCombo));
+        filters.add(labelled("Type", liveTypeCombo));
+        top.add(filters, BorderLayout.EAST);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel listCard = createCard();
+        listCard.setLayout(new BorderLayout(0, 10));
+        listCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
+        JPanel listHeader = new JPanel(new BorderLayout());
+        listHeader.setOpaque(false);
+        liveResultLabel = new JLabel("—");
+        liveResultLabel.setForeground(MUTED);
+        liveResultLabel.setFont(liveResultLabel.getFont().deriveFont(Font.PLAIN, 10f));
+        listHeader.add(liveResultLabel, BorderLayout.WEST);
+        listCard.add(listHeader, BorderLayout.NORTH);
+        liveListHost = new JPanel(new BorderLayout());
+        liveListHost.setOpaque(false);
+        listCard.add(liveListHost, BorderLayout.CENTER);
+        page.add(listCard, BorderLayout.CENTER);
+        return page;
+    }
+
+    /** Fills the date filter with every date that has at least one event. */
+    private void loadLiveFilters() {
+        if (liveDateCombo == null) {
+            return;
+        }
+        liveDateCombo.removeAllItems();
+        liveDateCombo.addItem("All dates");
+        List<LocalDate> dates = new ArrayList<>();
+        for (StadiumEvent event : StadiumData.getEvents()) {
+            if (!dates.contains(event.getDate())) {
+                dates.add(event.getDate());
+            }
+        }
+        java.util.Collections.sort(dates);
+        for (LocalDate date : dates) {
+            liveDateCombo.addItem(dayLabel(date));
+        }
+        liveDateCombo.setSelectedIndex(0);
+    }
+
+    /** "Today" / "Tomorrow" / "Sat, 3 Oct 2026". */
+    private String dayLabel(LocalDate date) {
+        LocalDate today = LocalDate.now();
+        if (date.equals(today)) {
+            return "Today · " + date.format(DATE_FORMATTER);
+        }
+        if (date.equals(today.plusDays(1))) {
+            return "Tomorrow · " + date.format(DATE_FORMATTER);
+        }
+        return date.format(DATE_FORMATTER);
+    }
+
+    private void refreshLiveSchedules() {
+        if (liveListHost == null) {
+            return;
+        }
+        String query = liveSearchField.getText().trim().toLowerCase(Locale.ENGLISH);
+        int dateIndex = liveDateCombo == null ? 0 : liveDateCombo.getSelectedIndex();
+        int typeIndex = liveTypeCombo == null ? 0 : liveTypeCombo.getSelectedIndex();
+        LocalDate dateFilter = null;
+        if (dateIndex > 0) {
+            List<LocalDate> dates = new ArrayList<>();
+            for (StadiumEvent event : StadiumData.getEvents()) {
+                if (!dates.contains(event.getDate())) {
+                    dates.add(event.getDate());
+                }
+            }
+            java.util.Collections.sort(dates);
+            dateFilter = dates.get(dateIndex - 1);
+        }
+
+        List<StadiumEvent> events = new ArrayList<>();
+        for (StadiumEvent event : StadiumData.getEvents()) {
+            if (dateFilter != null && !event.getDate().equals(dateFilter)) {
+                continue;
+            }
+            if (typeIndex == 1 && !event.isGame()) {
+                continue;
+            }
+            if (typeIndex == 2 && event.isGame()) {
+                continue;
+            }
+            if (!query.isEmpty() && !matchesLiveQuery(event, query)) {
+                continue;
+            }
+            events.add(event);
+        }
+        events.sort(java.util.Comparator.comparing(StadiumEvent::getDate)
+                .thenComparing(StadiumEvent::getStartTime)
+                .thenComparing(StadiumEvent::getId));
+
+        countdownLabels.clear();
+        eventActionButtons.clear();
+        JPanel list = new JPanel();
+        list.setOpaque(false);
+        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+        if (events.isEmpty()) {
+            list.add(buildEmptyState("No events match",
+                    "Try a different date, type or search word."));
+        } else {
+            LocalDate current = null;
+            for (StadiumEvent event : events) {
+                if (!event.getDate().equals(current)) {
+                    current = event.getDate();
+                    list.add(buildDayHeader(current));
+                    list.add(Box.createVerticalStrut(2));
+                }
+                list.add(createEventCard(event, true));
+                list.add(Box.createVerticalStrut(10));
+            }
+        }
+        JScrollPane scroll = new JScrollPane(list);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+
+        liveListHost.removeAll();
+        liveListHost.add(scroll, BorderLayout.CENTER);
+        liveResultLabel.setText(events.size() + " event" + (events.size() == 1 ? "" : "s")
+                + " across " + StadiumData.getStadiums().size() + " venues"
+                + (query.isEmpty() ? "" : "  •  matching \"" + liveSearchField.getText().trim() + "\""));
+        liveListHost.revalidate();
+        liveListHost.repaint();
+    }
+
+    private boolean matchesLiveQuery(StadiumEvent event, String query) {
+        if (event.searchableText().contains(query)) {
+            return true;
+        }
+        return venueMatches(event, query);
+    }
+
+    /**
+     * Whether a venue should match a search word. Deliberately ignores the venue
+     * description, which mentions words such as "Cranes" and would otherwise drag
+     * in every event at that ground when the user searched for a team.
+     */
+    private boolean venueMatches(StadiumEvent event, String query) {
+        Stadium stadium = StadiumData.getStadium(event.getStadiumId());
+        if (stadium == null) {
+            return false;
+        }
+        return (stadium.getName() + " " + stadium.getCity() + " " + stadium.getCountry()
+                + " " + stadium.getVenueType()).toLowerCase(Locale.ENGLISH).contains(query);
+    }
+
+    private JPanel buildDayHeader(LocalDate date) {
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        header.setOpaque(false);
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        JLabel label = new JLabel(dayLabel(date));
+        label.setForeground(BLUE_DARK);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 11f));
+        header.add(label);
+        return header;
+    }
+
+    /** Opens an event picked from the cross-venue schedule. */
+    private void openEventFromSchedule(StadiumEvent event) {
+        Stadium stadium = StadiumData.getStadium(event.getStadiumId());
+        if (stadium == null) {
+            showWarning("That venue is no longer available.");
+            return;
+        }
+        selectedStadium = stadium;
+        openEvent(event);
     }
 
     // ---------------------------------------------------------------------
@@ -2869,7 +3154,7 @@ public final class StadiumBookingApp extends JFrame {
         int matches = 0;
         for (StadiumEvent event : events) {
             if (!q.isEmpty() && !event.searchableText().contains(q)
-                    && (stadium == null || !stadium.searchableText().contains(q))) {
+                    && !venueMatches(event, q)) {
                 continue;
             }
             matches++;
