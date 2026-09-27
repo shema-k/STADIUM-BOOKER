@@ -34,6 +34,8 @@ A professional desktop stadium directory and seat-booking application built with
 - Searchable booking history
 - Click any booking row to open complete booking and customer details
 - Back buttons in the main header and opened dialogs for returning to the previous window
+- Hover, pressed and released highlighting on every button so the targeted control is always obvious
+- Status bar and tooltip name the button under the pointer and the button being clicked
 - Booking cancellation
 - Persistent H2 database for bookings and customer details
 - Bookings section reads complete records from the database

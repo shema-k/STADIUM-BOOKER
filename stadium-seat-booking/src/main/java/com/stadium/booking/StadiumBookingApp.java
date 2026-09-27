@@ -25,11 +25,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.border.Border;
+import javax.swing.border.CompoundBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -46,6 +51,7 @@ import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
@@ -109,9 +115,9 @@ public final class StadiumBookingApp extends JFrame {
     private final Map<JButton, StadiumEvent> eventActionButtons = new LinkedHashMap<>();
     private final DefaultTableModel bookingTableModel;
     private final JTable bookingTable;
-    private final JButton backNavButton = new JButton("← Back");
-    private final JButton stadiumNavButton = new JButton("Stadiums");
-    private final JButton bookingsNavButton = new JButton("My bookings");
+    private final JButton backNavButton = new FeedbackButton("← Back");
+    private final JButton stadiumNavButton = new FeedbackButton("Stadiums");
+    private final JButton bookingsNavButton = new FeedbackButton("My bookings");
 
     private Stadium selectedStadium;
     private StadiumEvent selectedEvent;
@@ -265,10 +271,14 @@ public final class StadiumBookingApp extends JFrame {
         button.setForeground(new Color(219, 234, 254));
         button.setFocusPainted(false);
         button.setContentAreaFilled(false);
+        // Keeps the navy header visible through the button; the outline and text
+        // carry the hover and pressed feedback instead of a background fill.
+        button.setOpaque(false);
         button.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(76, 112, 164)),
                 new EmptyBorder(8, 12, 8, 12)));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addInteractionFeedback(button);
     }
 
     private JPanel buildStatusBar() {
@@ -1649,8 +1659,7 @@ public final class StadiumBookingApp extends JFrame {
         bottom.setOpaque(false);
         JButton refresh = createSecondaryButton("Refresh");
         refresh.addActionListener(event -> refreshBookings());
-        cancelBookingButton = createSecondaryButton("Cancel selected booking");
-        cancelBookingButton.setForeground(new Color(185, 28, 28));
+        cancelBookingButton = createSecondaryButton("Cancel selected booking", new Color(185, 28, 28));
         cancelBookingButton.addActionListener(event -> cancelSelectedBooking());
         bottom.add(refresh);
         bottom.add(cancelBookingButton);
@@ -1917,54 +1926,225 @@ public final class StadiumBookingApp extends JFrame {
         return card;
     }
 
+    /**
+     * Button delegate that paints a flat fill taken straight from
+     * {@link AbstractButton#getBackground()}.
+     *
+     * <p>The stock look-and-feel delegate repaints the button with its own
+     * "pressed" colour, which overrode the background the application set and made
+     * the pressed state impossible to control. Painting the fill here guarantees
+     * the hover and pressed colours are exactly the ones requested.
+     */
+    private static final class FlatButtonUI extends BasicButtonUI {
+        @Override
+        public void paint(Graphics g, JComponent c) {
+            if (!(c instanceof AbstractButton button)) {
+                super.paint(g, c);
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                        RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                boolean enabled = button.isEnabled();
+                // Unfilled buttons (header navigation) keep the panel behind them.
+                if (c.isOpaque()) {
+                    g2.setColor(enabled ? button.getBackground()
+                            : blend(button.getBackground(), PAGE, 0.62));
+                    g2.fillRect(0, 0, c.getWidth(), c.getHeight());
+                }
+                String label = button.getText();
+                if (label == null || label.isEmpty()) {
+                    return;
+                }
+                Insets insets = c.getInsets();
+                int availableWidth = c.getWidth() - insets.left - insets.right;
+                int availableHeight = c.getHeight() - insets.top - insets.bottom;
+                if (availableWidth <= 0 || availableHeight <= 0) {
+                    return;
+                }
+                java.awt.FontMetrics metrics = g2.getFontMetrics(button.getFont());
+                g2.setColor(enabled ? button.getForeground()
+                        : blend(button.getForeground(), PAGE, 0.35));
+                g2.drawString(label,
+                        insets.left + (availableWidth - metrics.stringWidth(label)) / 2,
+                        insets.top + (availableHeight + metrics.getAscent() - metrics.getDescent()) / 2);
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
+    /** A {@link JButton} that keeps {@link FlatButtonUI} installed. */
+    private static final class FeedbackButton extends JButton {
+        FeedbackButton(String text) {
+            super(text);
+        }
+
+        @Override
+        public void updateUI() {
+            if (!(getUI() instanceof FlatButtonUI)) {
+                setUI(new FlatButtonUI());
+            }
+        }
+    }
+
+    /**
+     * Blends {@code from} towards {@code to}. An {@code amount} of 0 keeps
+     * {@code from} unchanged and 1 returns {@code to}.
+     */
+    private static Color blend(Color from, Color to, double amount) {
+        double keep = 1.0 - amount;
+        return new Color(
+                (int) Math.round(from.getRed() * keep + to.getRed() * amount),
+                (int) Math.round(from.getGreen() * keep + to.getGreen() * amount),
+                (int) Math.round(from.getBlue() * keep + to.getBlue() * amount));
+    }
+
+    /**
+     * Rebuilds a button border with a new outline colour while keeping the
+     * original outline thickness and inner padding, so hovering never shifts
+     * the layout.
+     */
+    private static Border recolourBorder(Border base, Color lineColor) {
+        if (base instanceof CompoundBorder compound) {
+            int thickness = compound.getOutsideBorder() instanceof LineBorder line
+                    ? line.getThickness() : 1;
+            return BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(lineColor, thickness), compound.getInsideBorder());
+        }
+        if (base instanceof LineBorder line) {
+            return BorderFactory.createLineBorder(lineColor, line.getThickness());
+        }
+        return base;
+    }
+
+    /**
+     * Gives a button clear hover, pressed and released feedback so it is always
+     * obvious which control the pointer is over and which one is being clicked.
+     *
+     * <p>Feedback is built from the button's own colours so it works for every
+     * style. Unfilled buttons (such as the header navigation) cannot show a
+     * background change, so their outline and text brighten instead. The current
+     * button label is also echoed into the status bar and the tooltip.
+     */
+    private void addInteractionFeedback(JButton button) {
+        Color baseBackground = button.getBackground();
+        Color baseForeground = button.getForeground();
+        Border baseBorder = button.getBorder();
+        boolean filled = button.isContentAreaFilled();
+
+        Color hoverBackground = filled ? blend(baseBackground, WHITE, 0.16) : baseBackground;
+        Color hoverForeground = filled ? baseForeground : blend(baseForeground, WHITE, 0.55);
+        Color hoverOutline = blend(baseForeground, WHITE, 0.25);
+        Color pressBackground = filled ? blend(baseBackground, Color.BLACK, 0.22) : baseBackground;
+        Color pressForeground = filled ? baseForeground : blend(baseForeground, WHITE, 0.85);
+        Color pressOutline = filled ? blend(baseForeground, WHITE, 0.75) : WHITE;
+
+        String label = button.getText();
+        if (button.getToolTipText() == null) {
+            button.setToolTipText(label == null || label.isBlank() ? null : label.trim());
+        }
+
+        Runnable rest = () -> {
+            button.setBackground(baseBackground);
+            button.setForeground(baseForeground);
+            button.setBorder(baseBorder);
+        };
+        Runnable hover = () -> {
+            button.setBackground(hoverBackground);
+            button.setForeground(hoverForeground);
+            button.setBorder(recolourBorder(baseBorder, hoverOutline));
+        };
+        Runnable press = () -> {
+            button.setBackground(pressBackground);
+            button.setForeground(pressForeground);
+            button.setBorder(recolourBorder(baseBorder, pressOutline));
+        };
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent event) {
+                if (!button.isEnabled()) {
+                    return;
+                }
+                hover.run();
+                if (label != null && !label.isBlank()) {
+                    showStatus("Hover: " + label.trim());
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent event) {
+                rest.run();
+            }
+
+            @Override
+            public void mousePressed(MouseEvent event) {
+                if (!button.isEnabled()) {
+                    return;
+                }
+                press.run();
+                button.repaint();
+                if (label != null && !label.isBlank()) {
+                    showStatus("Clicking: " + label.trim());
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                if (!button.isEnabled()) {
+                    return;
+                }
+                hover.run();
+                button.repaint();
+            }
+        });
+    }
+
     private JButton createPrimaryButton(String text) {
-        JButton button = new JButton(text);
+        JButton button = new FeedbackButton(text);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
         button.setForeground(WHITE);
         button.setBackground(BLUE);
         button.setFocusPainted(false);
+        button.setOpaque(true);
         button.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BLUE_DARK), new EmptyBorder(9, 14, 9, 14)));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent event) {
-                if (button.isEnabled()) {
-                    button.setBackground(BLUE_DARK);
-                }
-            }
-
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent event) {
-                if (button.isEnabled()) {
-                    button.setBackground(BLUE);
-                }
-            }
-        });
+        addInteractionFeedback(button);
         return button;
     }
 
     private JButton createSecondaryButton(String text) {
-        JButton button = new JButton(text);
+        return createSecondaryButton(text, TEXT);
+    }
+
+    private JButton createSecondaryButton(String text, Color foreground) {
+        JButton button = new FeedbackButton(text);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
-        button.setForeground(TEXT);
+        button.setForeground(foreground);
         button.setBackground(WHITE);
         button.setFocusPainted(false);
+        button.setOpaque(true);
         button.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(190, 202, 218)), new EmptyBorder(9, 13, 9, 13)));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addInteractionFeedback(button);
         return button;
     }
 
     private JButton createOutlineButton(String text, Color accent) {
-        JButton button = new JButton(text);
+        JButton button = new FeedbackButton(text);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 11f));
         button.setForeground(accent.darker());
         button.setBackground(WHITE);
         button.setFocusPainted(false);
+        button.setOpaque(true);
         button.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(accent), new EmptyBorder(8, 12, 8, 12)));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addInteractionFeedback(button);
         return button;
     }
 
