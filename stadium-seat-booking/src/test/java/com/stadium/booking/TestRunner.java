@@ -101,6 +101,8 @@ public final class TestRunner {
         KeyboardSeatSelectionTest.register();
         StaffAccountTest.register();
         DatabaseProtectionTest.register();
+        StadiumDetailsTest.register();
+        StadiumDetailsTest.registerPictureSuite();
         System.exit(summary());
     }
 }

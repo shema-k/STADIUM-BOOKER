@@ -42,6 +42,7 @@ import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.JComboBox;
+import javax.swing.JEditorPane;
 import javax.swing.JFileChooser;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -708,12 +709,47 @@ public final class StadiumBookingApp extends JFrame {
                 + (next == null ? "No events listed" : next.getDateLabel()));
         facts.setForeground(TEXT);
         facts.setFont(facts.getFont().deriveFont(Font.PLAIN, 10f));
-        JButton open = createOutlineButton(Messages.get("directory.open"), accent);
-        open.addActionListener(event -> openStadium(stadium));
+        JButton open = createOutlineButton(Messages.get("directory.viewDetails"), accent);
+        open.addActionListener(event -> showStadiumDetails(stadium));
         footer.add(facts, BorderLayout.CENTER);
         footer.add(open, BorderLayout.EAST);
         card.add(footer, BorderLayout.SOUTH);
+        // Tapping anywhere on the card opens the venue, not only the button.
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.setToolTipText("Open " + stadium.getName());
+        card.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) {
+                    showStadiumDetails(stadium);
+                }
+            }
+        });
+        for (java.awt.Component child : card.getComponents()) {
+            attachCardClick(child, stadium);
+        }
         return card;
+    }
+
+    /** Lets a click anywhere on a card, not just its button, open the venue. */
+    private void attachCardClick(java.awt.Component component, Stadium stadium) {
+        if (component instanceof AbstractButton) {
+            return; // buttons keep their own listener
+        }
+        component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        component.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) {
+                    showStadiumDetails(stadium);
+                }
+            }
+        });
+        if (component instanceof java.awt.Container container) {
+            for (java.awt.Component child : container.getComponents()) {
+                attachCardClick(child, stadium);
+            }
+        }
     }
 
     private JPanel createBookingSteps() {
@@ -749,6 +785,435 @@ public final class StadiumBookingApp extends JFrame {
         step.add(circle);
         step.add(label);
         return step;
+    }
+
+    // ---------------------------------------------------------------------
+    // Stadium details
+    // ---------------------------------------------------------------------
+
+    /**
+     * Everything the application knows about one venue, in one screen.
+     *
+     * <p>The picture, the address, the description, the four sections with their
+     * real prices, what is on there and how full it is. The schedule and the seat
+     * map are one click away, so choosing a venue still leads to booking.
+     */
+    private void showStadiumDetails(Stadium stadium) {
+        currentScreen = "stadium-details";
+        selectedStadium = stadium;
+        StadiumDetails details = StadiumDetails.of(stadium, bookingService);
+        setHeader(stadium.getName(),
+                details.getSummary());
+        contentHost.removeAll();
+        contentHost.add(buildStadiumDetailsContent(stadium, details), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus(stadium.getName() + "  •  " + stadium.getLocation());
+    }
+
+    private JPanel buildStadiumDetailsContent(Stadium stadium, StadiumDetails details) {
+        JPanel page = new JPanel(new BorderLayout(0, 12));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(16, 0, 20, 0));
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        top.setOpaque(false);
+        JButton back = createOutlineButton("\u2190 All stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        top.add(back);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel middle = new JPanel();
+        middle.setOpaque(false);
+        middle.setLayout(new BoxLayout(middle, BoxLayout.Y_AXIS));
+
+        // The picture beside the headline figures, rather than swallowing the page.
+        JPanel topRow = new JPanel(new BorderLayout(12, 0));
+        topRow.setOpaque(false);
+        topRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 268));
+        StadiumPhotoPanel picture = new StadiumPhotoPanel(stadium);
+        JPanel pictureCard = createCard();
+        pictureCard.setLayout(new BorderLayout(0, 0));
+        pictureCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(8, 8, 8, 8)));
+        pictureCard.add(picture, BorderLayout.CENTER);
+        pictureCard.setPreferredSize(new Dimension(520, 252));
+        topRow.add(pictureCard, BorderLayout.WEST);
+
+        JPanel factsCard = createCard();
+        factsCard.setLayout(new BorderLayout(0, 10));
+        factsCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+        factsCard.add(buildQuickFacts(stadium, details), BorderLayout.CENTER);
+        factsCard.add(buildHighlights(details), BorderLayout.SOUTH);
+        topRow.add(factsCard, BorderLayout.CENTER);
+        middle.add(topRow);
+
+        middle.add(Box.createVerticalStrut(12));
+
+        JPanel lower = new JPanel(new BorderLayout(12, 0));
+        lower.setOpaque(false);
+        JPanel about = buildAboutCard(stadium);
+        about.setPreferredSize(new Dimension(320, 100));
+        JPanel sections = buildSectionsCard(details);
+        sections.setPreferredSize(new Dimension(430, 100));
+        JPanel side = buildSideCard(details, stadium);
+        side.setPreferredSize(new Dimension(400, 100));
+        lower.add(about, BorderLayout.WEST);
+        lower.add(sections, BorderLayout.CENTER);
+        lower.add(side, BorderLayout.EAST);
+        middle.add(lower);
+
+        page.add(middle, BorderLayout.CENTER);
+        page.add(buildDetailsActions(stadium), BorderLayout.SOUTH);
+        return page;
+    }
+
+    /** The handful of facts worth reading first, beside the picture. */
+    private JPanel buildHighlights(StadiumDetails details) {
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        StadiumEvent next = details.getNextEvent();
+        if (next != null) {
+            text.add(sideText("<b>Next up</b>  " + next.getHeadline(), "#1e293b", 12f));
+            text.add(sideText(Messages.dateLabel(next.getDate()) + "  •  "
+                    + next.getTimeLabel() + "  •  Doors " + next.getDoorsLabel(),
+                    "#64748b", 10f));
+        } else {
+            text.add(sideText("No events are scheduled here yet.", "#64748b", 11f));
+        }
+        text.add(Box.createVerticalStrut(8));
+        text.add(sideText("Booking closes " + (next == null ? "\u2014"
+                : next.getBookingDeadlineLabel()) + ". Six seats per reservation, and no "
+                + "limit on how many reservations one person may hold.", "#64748b", 10f));
+        return text;
+    }
+
+    /** Capacity, shape, venue type and price span, under the picture. */
+    private JPanel buildQuickFacts(Stadium stadium, StadiumDetails details) {
+        JPanel facts = new JPanel(new GridLayout(2, 2, 16, 8));
+        facts.setOpaque(false);
+        facts.add(factTile("Capacity", StadiumPhotoPanel.compact(stadium.getCapacity()),
+                "published figure"));
+        facts.add(factTile("Shape", stadium.getShapeLabel().replace(" stadium", ""),
+                stadium.getShape() == StadiumShape.BOX ? "four straight stands" : "continuous bowl"));
+        facts.add(factTile("Seat price", details.getPriceSpan(), "plus "
+                + BookingService.formatMoney(details.getBookingFee()) + " fee"));
+        facts.add(factTile("On sale now", details.getEventCount() + " events",
+                String.format(Locale.US, "%.2f%% vacant", details.getVacancyPercentage())));
+        return facts;
+    }
+
+    private JPanel factTile(String heading, String value, String note) {
+        JPanel tile = new JPanel(new GridBagLayout());
+        tile.setOpaque(false);
+        tile.setBorder(new EmptyBorder(4, 0, 4, 0));
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        JLabel label = new JLabel(heading.toUpperCase(Locale.ENGLISH));
+        label.setForeground(MUTED);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 9f));
+        tile.add(label, constraints);
+        constraints.gridy = 1;
+        constraints.insets = new Insets(2, 0, 0, 0);
+        JLabel amount = new JLabel(value);
+        amount.setForeground(TEXT);
+        amount.setFont(amount.getFont().deriveFont(Font.BOLD, 13f));
+        tile.add(amount, constraints);
+        constraints.gridy = 2;
+        constraints.insets = new Insets(1, 0, 0, 0);
+        JLabel sub = new JLabel(note);
+        sub.setForeground(MUTED);
+        sub.setFont(sub.getFont().deriveFont(Font.PLAIN, 9f));
+        tile.add(sub, constraints);
+        return tile;
+    }
+
+    private JPanel buildAboutCard(Stadium stadium) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+
+        JLabel title = new JLabel("About this venue");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        card.add(title, BorderLayout.NORTH);
+
+        // One HTML document rather than a stack of labels: the wrapping, the
+        // alignment and the column widths are then the editor pane's problem and
+        // not a row of panels fighting over a fixed height.
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body style='font-family:SansSerif; margin:0;'>");
+        detailRow(html, "Where", stadium.getAddress());
+        detailRow(html, "City", stadium.getCity() + ", " + stadium.getCountry());
+        detailRow(html, "Type", stadium.getVenueType());
+        detailRow(html, "Footprint", stadium.getShapeLabel());
+        detailRow(html, "Seats on sale", String.valueOf(stadium.getSeatCount()));
+        detailRow(html, "Sections", stadium.getSections().size() + " independent");
+        html.append("<p style='margin-top:10px; color:#1e293b; font-size:11px;'>")
+                .append(stadium.getDescription()).append("</p>");
+        html.append("</body></html>");
+        card.add(htmlScroll(html.toString(), 11f), BorderLayout.CENTER);
+        return card;
+    }
+
+    /** One label-and-value line in the About card. */
+    private void detailRow(StringBuilder html, String heading, String value) {
+        html.append("<div style='margin-bottom:5px;'>")
+                .append("<span style='color:#64748b; font-size:10px;'>").append(heading)
+                .append("</span><br>")
+                .append("<span style='color:#1e293b; font-size:11px;'>").append(value)
+                .append("</span></div>");
+    }
+
+    /**
+     * A read-only HTML pane that wraps its content to the width it is given.
+     * Used instead of stacked labels, which is what was clipping the text.
+     */
+    private JComponent htmlScroll(String html, float baseSize) {
+        JEditorPane pane = new JEditorPane("text/html", html);
+        pane.setEditable(false);
+        pane.setOpaque(false);
+        pane.setBorder(BorderFactory.createEmptyBorder());
+        pane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+        pane.setFont(pane.getFont().deriveFont(Font.PLAIN, baseSize));
+        JScrollPane scroll = new JScrollPane(pane);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getHorizontalScrollBar().setVisible(false);
+        // An HTML pane opens showing the bottom of its document, which hid the
+        // first lines of the About card. Pin it back to the top once sized.
+        pane.setCaretPosition(0);
+        SwingUtilities.invokeLater(() -> {
+            pane.setCaretPosition(0);
+            scroll.getViewport().setViewPosition(new java.awt.Point(0, 0));
+        });
+        return scroll;
+    }
+
+    /**
+     * What is on, availability and notices, in one scrolling column. Split across
+     * two cards they were squeezed to nothing by the height left under the picture.
+     */
+    private JPanel buildSideCard(StadiumDetails details, Stadium stadium) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+
+        JLabel title = new JLabel("At this venue");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        card.add(title, BorderLayout.NORTH);
+
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body style='font-family:SansSerif; margin:0;'>");
+
+        htmlHeading(html, "What is on here", details.getEventCount() + " upcoming");
+        html.append("<div style='color:#64748b; font-size:9px; margin:-2px 0 4px 0;'>")
+                .append(details.getGameCount()).append(" games, ")
+                .append(details.getConcertCount()).append(" concerts</div>");
+        html.append("<table width='100%' cellpadding='0' cellspacing='0'>");
+        for (StadiumEvent event : details.getEvents()) {
+            boolean open = bookingService.isBookingOpen(event);
+            html.append("<tr><td width='106' valign='top' style='color:#64748b; font-size:9px;'>")
+                    .append(Messages.dateLabel(event.getDate())).append("</td>")
+                    .append("<td valign='top' style='font-size:10px; color:")
+                    .append(open ? "#1e293b" : "#94a3b8").append(";'>")
+                    .append(event.getHeadline());
+            if (!open) {
+                html.append(" <span style='color:#b91c1c; font-weight:bold;'>closed</span>");
+            }
+            html.append("</td></tr>");
+        }
+        html.append("</table>");
+
+        if (!details.getTeams().isEmpty()) {
+            html.append("<p style='margin:8px 0 0 0; color:#64748b; font-size:10px;'>")
+                    .append("<b>Clubs and teams:</b> ")
+                    .append(joinNames(details.getTeams())).append("</p>");
+        }
+        if (!details.getArtists().isEmpty()) {
+            html.append("<p style='margin:6px 0 0 0; color:#64748b; font-size:10px;'>")
+                    .append("<b>Artists:</b> ")
+                    .append(joinNames(details.getArtists())).append("</p>");
+        }
+
+        htmlHeading(html, "Availability",
+                String.format(Locale.US, "%.2f%% vacant", details.getVacancyPercentage()));
+        html.append("<div style='color:#475569; font-size:10px;'>")
+                .append(String.format(Locale.US, "%s of %s seats sold across the %d events.",
+                        String.valueOf(details.getSeatsBooked()),
+                        String.valueOf(details.getSeatsOnSale()),
+                        details.getEventCount())).append("</div>");
+        if (details.getBlockedEvents().isEmpty()) {
+            html.append("<div style='color:#15803d; font-size:10px;'>")
+                    .append("Every event here is open for booking.</div>");
+        } else {
+            html.append("<div style='color:#b91c1c; font-size:10px;'><b>")
+                    .append(details.getBlockedEvents().size())
+                    .append(" event(s) cannot be booked</b> because of a cancellation or an ")
+                    .append("emergency notice, and are marked on the schedule.</div>");
+        }
+
+        if (details.hasNotices()) {
+            htmlHeading(html, "Notices", details.getNotices().size() + " posted");
+            for (StadiumAnnouncement notice : details.getNotices()) {
+                html.append("<div style='color:#475569; font-size:10px; margin-bottom:6px;'>")
+                        .append("<b>").append(notice.getTitle()).append("</b><br>")
+                        .append(notice.getMessage()).append("</div>");
+            }
+        }
+        html.append("</body></html>");
+
+        card.add(htmlScroll(html.toString(), 11f), BorderLayout.CENTER);
+
+        JButton request = createSecondaryButton("Submit a special request");
+        request.addActionListener(event -> showSpecialRequestDialog(stadium));
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        actions.setOpaque(false);
+        actions.add(request);
+        card.add(actions, BorderLayout.SOUTH);
+        return card;
+    }
+
+    private void htmlHeading(StringBuilder html, String title, String note) {
+        html.append("<div style='margin-top:12px; margin-bottom:2px;'>")
+                .append("<span style='color:#1e293b; font-size:11px; font-weight:bold;'>")
+                .append(title).append("</span> ")
+                .append("<span style='color:#94a3b8; font-size:9px;'>").append(note)
+                .append("</span></div>");
+    }
+
+    private String joinNames(List<String> names) {
+        return String.join(", ", names);
+    }
+
+    /** The four sections with their real geometry and real prices. */
+    private JPanel buildSectionsCard(StadiumDetails details) {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(12, 14, 12, 14)));
+
+        JLabel title = new JLabel("Seating sections");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        JLabel note = new JLabel("Front rows are the dearest in every section.");
+        note.setForeground(MUTED);
+        note.setFont(note.getFont().deriveFont(Font.PLAIN, 10f));
+        JPanel heading = new JPanel(new BorderLayout());
+        heading.setOpaque(false);
+        heading.add(title, BorderLayout.NORTH);
+        heading.add(note, BorderLayout.SOUTH);
+        card.add(heading, BorderLayout.NORTH);
+
+        DefaultTableModel model = new DefaultTableModel(
+                new Object[]{"", "Section", "Rows", "Seats per row", "Seats", "Price per seat"},
+                0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        Stadium stadium = details.getStadium();
+        Color accent = StadiumPhotoPanel.colorOf(stadium.getAccentColor(), BLUE);
+        for (StadiumDetails.SectionFacts facts : details.getSections()) {
+            model.addRow(new Object[]{"", facts.getId() + "  " + facts.getLabel(),
+                    facts.getRows(), facts.getSeatsPerRow(), facts.getSeatCount(),
+                    facts.getPriceRange()});
+        }
+        JTable table = new JTable(model);
+        table.setBackground(WHITE);
+        table.setForeground(TEXT);
+        table.setRowHeight(30);
+        table.setGridColor(new Color(235, 240, 247));
+        table.getTableHeader().setBackground(SKY);
+        table.getTableHeader().setForeground(BLUE_DARK);
+        table.getTableHeader().setFont(table.getTableHeader().getFont()
+                .deriveFont(Font.BOLD, 11f));
+        int[] widths = {24, 138, 54, 92, 70, 196};
+        for (int column = 0; column < widths.length; column++) {
+            table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+        // A colour chip per section, matching the picture above it.
+        table.getColumnModel().getColumn(0).setCellRenderer(
+                new javax.swing.table.DefaultTableCellRenderer() {
+                    @Override
+                    public java.awt.Component getTableCellRendererComponent(JTable owner,
+                                                                           Object value,
+                                                                           boolean selected,
+                                                                           boolean focused,
+                                                                           int row,
+                                                                           int column) {
+                        java.awt.Component component =
+                                super.getTableCellRendererComponent(owner, value, selected,
+                                        focused, row, column);
+                        component.setBackground(StadiumPhotoPanel.sectionColor(row, accent));
+                        return component;
+                    }
+                });
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        card.add(scroll, BorderLayout.CENTER);
+
+        JLabel totals = new JLabel(String.format(Locale.US,
+                "%s seats in total across four sections  •  booking fee %s per reservation",
+                String.valueOf(stadium.getSeatCount()),
+                BookingService.formatMoney(details.getBookingFee())));
+        totals.setForeground(MUTED);
+        totals.setFont(totals.getFont().deriveFont(Font.PLAIN, 10f));
+        card.add(totals, BorderLayout.SOUTH);
+        return card;
+    }
+
+    /** Shortens text that would run past the right edge. */
+    private static String clip(Graphics2D g, String text, int maxWidth) {
+        if (text == null) {
+            return "";
+        }
+        if (g.getFontMetrics().stringWidth(text) <= maxWidth) {
+            return text;
+        }
+        String trimmed = text;
+        while (trimmed.length() > 3
+                && g.getFontMetrics().stringWidth(trimmed + "…") > maxWidth) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed + "…";
+    }
+
+    /** A short wrapped line, pinned left, for the block beside the picture. */
+    private JLabel sideText(String html, String colour, float size) {
+        JLabel label = new JLabel("<html><div style='width:560px'>" + html + "</div></html>");
+        label.setForeground(Color.decode(colour));
+        label.setFont(label.getFont().deriveFont(Font.PLAIN, size));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
+    }
+
+    /** The way through to the schedule and the seat map. */
+    private JPanel buildDetailsActions(Stadium stadium) {
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        actions.setOpaque(false);
+        JButton schedule = createPrimaryButton("See the schedule and book seats");
+        schedule.addActionListener(event -> openStadium(stadium));
+        actions.add(schedule);
+        JButton ledger = createSecondaryButton("See seats already booked here");
+        ledger.addActionListener(event -> {
+            selectedStadium = stadium;
+            showSeatLedger();
+        });
+        actions.add(ledger);
+        return actions;
     }
 
     private void openStadium(Stadium stadium) {
@@ -2443,7 +2908,6 @@ public final class StadiumBookingApp extends JFrame {
 
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(BorderFactory.createEmptyBorder());
-        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.getViewport().setBackground(WHITE);
         scroll.setPreferredSize(new Dimension(650, 620));
         showDialogChoice(this, scroll, "Complete booking details",

@@ -7,6 +7,11 @@ A professional desktop stadium directory and seat-booking application built with
 ## Features
 
 - Stadium directory with venue information
+- **Stadium details page** on tapping any venue, with everything known about it in one place
+- A picture of every venue: a real photograph if one is supplied, otherwise the venue's own
+  aerial seating plan drawn from its real shape, sections and colours
+- Details page shows capacity, shape, seat price span, upcoming events, clubs and artists
+  hosted, current vacancy, notices, and the full address
 - Search stadiums by name, city, country, team or artist
 - Eleven real Ugandan venues with locations, capacity and venue descriptions
 - Real published capacities, from Namboole's 45,202 down to Pece Stadium's 3,000
@@ -92,16 +97,48 @@ A professional desktop stadium directory and seat-booking application built with
 ./run-tests.sh
 ```
 
-One hundred and twenty tests covering the venue and event data, pricing and booking rules, database
+One hundred and forty-five tests covering the venue and event data, pricing and booking rules, database
 persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
 the three languages, the occupancy report, keyboard seat selection, staff accounts and
-requiring a database password. The runner needs nothing but a JDK, so no build tool or
-network access is required.
+requiring a database password, and the stadium detail pages and pictures. The runner needs
+nothing but a JDK, so no build tool or network access is required.
+
+One of those checks guards a real defect: the detail page had its own copy of the seat
+price curve and was quoting prices the seat map would never charge. It now shares the seat
+map's own curve, and a test compares the two.
 
 Two of them are regression tests for the defect where a confirmed booking could be
 silently destroyed when two people saved at once, and twelve drive the seat-map key
 actions directly, because clicking through a headless display is not a reliable way to
 test keyboard behaviour.
+
+## Adding real photographs
+
+The venues are drawn, not photographed. Each venue's picture is generated from its real
+shape, its four real sections and its own accent colour, so it is accurate, sharp at any
+size, and adds nothing to the repository.
+
+To use a real photograph instead, put the file in a `photos` folder beside the application
+using the venue id as the name, then restart:
+
+| File | Venue |
+|---|---|
+| `photos/namboole.jpg` | Mandela National Stadium (Namboole) |
+| `photos/hoima-city.jpg` | Hoima City Stadium |
+| `photos/hamz-stadium.jpg` | Hamz Stadium (Nakivubo) |
+| `photos/st-marys.jpg` | St. Mary's Stadium, Kitende |
+| `photos/kyabazinga.jpg` | Kyabazinga Stadium, Bugembe |
+| `photos/omondi.jpg` | MTN Omondi Stadium, Lugogo |
+| `photos/mutesa-ii.jpg` | Mutesa II Stadium, Wankulukuku |
+| `photos/kadiba.jpg` | FUFA Kadiba Stadium |
+| `photos/bunamwaya.jpg` | Bunamwaya Stadium |
+| `photos/mbale-municipal.jpg` | Mbale Municipal Stadium |
+| `photos/pece-war.jpg` | Pece War Memorial Stadium |
+
+`.jpg`, `.jpeg` and `.png` are all accepted. The photo is scaled to fill the panel and
+cropped rather than squashed, and the venue name is captioned over the foot of it. Nothing
+needs recompiling. Photographs are not bundled here because real images of these venues are
+third-party work with their own rights; supply the ones you are licensed to use.
 
 ## Included sample data
 
@@ -172,7 +209,10 @@ java -jar target/stadium-select.jar
 ## How to use it
 
 1. Search for a stadium or choose one from the directory cards.
-2. Review the stadium information, upcoming schedule, countdown and special notices.
+2. Tap any venue card to open its details page: picture, address, description, the four
+   seating sections with real prices, what is on there, and current vacancy.
+3. Press **See the schedule and book seats** to carry on to the schedule.
+4. Review the stadium information, upcoming schedule, countdown and special notices.
 3. Use the date selector and event search bar to find a game or concert.
 4. Open the event to view its sport, teams or artist, date, start time, doors time and booking deadline.
 5. Choose section A, B, C or D and tap a vacant seat. The map shows the exact seat number and price.

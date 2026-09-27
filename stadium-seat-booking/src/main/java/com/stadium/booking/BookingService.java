@@ -133,7 +133,7 @@ public class BookingService {
         return stadium == null ? StadiumData.getStadium("namboole") : stadium;
     }
 
-    public double getRowPriceMultiplier(int row, int rows) {
+    public static double getRowPriceMultiplier(int row, int rows) {
         if (rows <= 1) {
             return 1.0;
         }
@@ -291,7 +291,7 @@ public class BookingService {
      * Rounds a charge to the nearest 500 shillings, which is how Ugandan
      * ticketing prices are normally rounded for cash sales.
      */
-    private double roundMoney(double value) {
+    static double roundMoney(double value) {
         return Math.round(value / 500.0) * 500.0;
     }
 

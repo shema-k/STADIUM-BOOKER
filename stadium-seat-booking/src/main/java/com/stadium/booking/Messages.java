@@ -80,6 +80,7 @@ public final class Messages {
         put(Language.ENGLISH, "directory.venuesAvailable", "{0} venues available");
         put(Language.ENGLISH, "directory.venuesMatching", "{0} venues matching your search");
         put(Language.ENGLISH, "directory.open", "Open stadium");
+        put(Language.ENGLISH, "directory.viewDetails", "View details");
         put(Language.ENGLISH, "stadium.upcoming", "Upcoming schedule");
         put(Language.ENGLISH, "stadium.search.hint", "Search teams, artists, sport or date");
         put(Language.ENGLISH, "stadium.subtitle",
@@ -180,6 +181,7 @@ public final class Messages {
         put(Language.LUGANDA, "directory.findVenue", "LONDA EKIZIMBE");
         put(Language.LUGANDA, "directory.search.hint", "Shunja ekizimbe, egga, ekizibuBy'obujjuni");
         put(Language.LUGANDA, "directory.open", "Kikikizo");
+        put(Language.LUGANDA, "directory.viewDetails", "Lola ebisinga by'obuddwa");
         put(Language.LUGANDA, "booking.title", "Yatandika ebizitansa");
         put(Language.LUGANDA, "booking.yourDetails", "Ebikwata by'ekisobola");
         put(Language.LUGANDA, "booking.name", "Amalinnya");
@@ -217,6 +219,7 @@ public final class Messages {
         put(Language.SWAHILI, "directory.findVenue", "TAFAUTA UWANJA");
         put(Language.SWAHILI, "directory.search.hint", "Tafuta uwanja, mji, timu au msanii");
         put(Language.SWAHILI, "directory.open", "Fungua uwanja");
+        put(Language.SWAHILI, "directory.viewDetails", "Angalia maelezo");
         put(Language.SWAHILI, "booking.title", "Viti vyako");
         put(Language.SWAHILI, "booking.yourDetails", "Maelezo yako");
         put(Language.SWAHILI, "booking.name", "Jina");
