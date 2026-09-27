@@ -135,6 +135,7 @@ public final class StadiumBookingApp extends JFrame {
     private final JButton bookingsNavButton = new FeedbackButton(Messages.get("nav.bookings"));
     private final JButton seatLedgerNavButton = new FeedbackButton(Messages.get("nav.bookedSeats"));
     private final JButton occupancyNavButton = new FeedbackButton(Messages.get("nav.occupancy"));
+    private final JButton staffNavButton = new FeedbackButton(Messages.get("nav.staff"));
 
     private Stadium selectedStadium;
     private StadiumEvent selectedEvent;
@@ -158,7 +159,10 @@ public final class StadiumBookingApp extends JFrame {
     private JLabel ledgerSummaryLabel;
     private JLabel ledgerSectionLabel;
     private String currentScreen = "directory";
+    private Database database;
+    private StaffDirectory staffDirectory;
     private StaffSession staffSession;
+    private JLabel staffBadge;
     private final String sessionOwner = UUID.randomUUID().toString();
     private JLabel holdCountdownValue;
     private String ledgerReturnScreen = "directory";
@@ -179,11 +183,12 @@ public final class StadiumBookingApp extends JFrame {
         super("Stadium Select");
         directorySearchTimer.setRepeats(false);
         liveSearchTimer.setRepeats(false);
-        bookingService = new BookingService();
-        // A staff PIN protects the screens that show customer contact details.
-        // The default is shown on first run so the application is usable out of
-        // the box; change it in StaffSession for a real deployment.
-        staffSession = new StaffSession("1234");
+        // Bookings and staff accounts live in one database, so a single Database
+        // instance is shared between them.
+        database = openDatabase();
+        bookingService = new BookingService(database);
+        staffDirectory = new StaffDirectory(database);
+        staffSession = new StaffSession(staffDirectory);
         seatMapPanel = new SeatMapPanel(bookingService, this::onSeatToggled,
                 this::updateBookingSummary, this::showStatus);
         seatMapPanel.setHoldOwner(sessionOwner);
@@ -329,11 +334,13 @@ public final class StadiumBookingApp extends JFrame {
         styleHeaderButton(bookingsNavButton);
         styleHeaderButton(seatLedgerNavButton);
         styleHeaderButton(occupancyNavButton);
+        styleHeaderButton(staffNavButton);
         backNavButton.addActionListener(event -> goBack());
         stadiumNavButton.addActionListener(event -> showStadiumDirectory());
         bookingsNavButton.addActionListener(event -> showBookings());
         seatLedgerNavButton.addActionListener(event -> showSeatLedger());
         occupancyNavButton.addActionListener(event -> showOccupancyReport());
+        staffNavButton.addActionListener(event -> promptForStaffAction());
         describe(backNavButton, "Back", "Return to the previous screen");
         describe(stadiumNavButton, "Venues", "Show every stadium and concert venue");
         describe(bookingsNavButton, "My bookings", "Sign in and review your reservations");
@@ -341,14 +348,24 @@ public final class StadiumBookingApp extends JFrame {
                 "Sign in and see which seats are already taken at each venue and event");
         describe(occupancyNavButton, "Occupancy",
                 "Sign in and see how full each venue and section is");
+        describe(staffNavButton, "Staff",
+                "Sign in, change your PIN, or manage staff accounts");
         navigation.add(backNavButton);
         navigation.add(stadiumNavButton);
         navigation.add(bookingsNavButton);
         navigation.add(seatLedgerNavButton);
         navigation.add(occupancyNavButton);
+        navigation.add(staffNavButton);
 
         header.add(titleBlock, BorderLayout.WEST);
-        header.add(navigation, BorderLayout.EAST);
+        staffBadge = new JLabel("Not signed in");
+        staffBadge.setForeground(new Color(191, 219, 254));
+        staffBadge.setFont(staffBadge.getFont().deriveFont(Font.PLAIN, 10f));
+        JPanel badgeBox = new JPanel(new BorderLayout(0, 1));
+        badgeBox.setOpaque(false);
+        badgeBox.add(navigation, BorderLayout.CENTER);
+        badgeBox.add(staffBadge, BorderLayout.SOUTH);
+        header.add(badgeBox, BorderLayout.EAST);
         return header;
     }
 
@@ -399,6 +416,8 @@ public final class StadiumBookingApp extends JFrame {
             brandLabel.setText(text("app.tagline"));
         }
         occupancyNavButton.setText(text("nav.occupancy"));
+        staffNavButton.setText(text("nav.staff"));
+        updateStaffBadge();
         seatMapPanel.retranslate();
         backNavButton.setText(text("nav.back"));
         stadiumNavButton.setText(text("nav.venues"));
@@ -464,7 +483,8 @@ public final class StadiumBookingApp extends JFrame {
                 showStadiumDirectory();
             }
         } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)
-                || "schedules".equals(currentScreen) || "occupancy".equals(currentScreen)) {
+                || "schedules".equals(currentScreen) || "occupancy".equals(currentScreen)
+                || "staff".equals(currentScreen)) {
             showStadiumDirectory();
         }
     }
@@ -3283,7 +3303,7 @@ public final class StadiumBookingApp extends JFrame {
         if (booking == null) {
             return "—";
         }
-        if (StaffSession.canViewCustomerDetails(staffSession.isSignedIn())) {
+        if (staffSession.canViewCustomerDetails()) {
             return booking.getCustomerName();
         }
         String name = booking.getCustomerName() == null ? "" : booking.getCustomerName().trim();
@@ -3300,29 +3320,189 @@ public final class StadiumBookingApp extends JFrame {
         if (booking == null) {
             return "—";
         }
-        if (StaffSession.canViewCustomerDetails(staffSession.isSignedIn())) {
+        if (staffSession.canViewCustomerDetails()) {
             return booking.getEmail() + "  •  " + booking.getPhone();
         }
         return "Sign in as staff to view contact details";
     }
 
+    // ---------------------------------------------------------------------
+    // Staff accounts
+    // ---------------------------------------------------------------------
+
+    /** The file the bookings and staff accounts are kept in. */
+    private static java.nio.file.Path databaseFile() {
+        return new java.io.File("stadium-bookings.dat").toPath();
+    }
+
     /**
-     * Asks for the staff PIN. Returns true when signed in; false means the user
-     * chose to skip, which leaves the management screens closed.
+     * Opens the database, asking for the password first when the file is encrypted.
+     *
+     * <p>Whether a password is needed has to be read from a sidecar file, because an
+     * encrypted database cannot be opened to report its own state.
+     */
+    private Database openDatabase() {
+        java.nio.file.Path file = databaseFile();
+        if (!Database.requiresPassword(file)) {
+            return new Database(file);
+        }
+        JPasswordField field = new JPasswordField(16);
+        field.setFont(field.getFont().deriveFont(Font.PLAIN, 13f));
+        JPanel form = new JPanel(new BorderLayout(0, 8));
+        JLabel prompt = new JLabel("This database is encrypted. Enter its password:");
+        prompt.setForeground(TEXT);
+        form.add(prompt, BorderLayout.NORTH);
+        form.add(field, BorderLayout.CENTER);
+        JLabel warning = new JLabel("The password cannot be recovered. Without it the "
+                + "bookings cannot be opened.\nNote: this stops the file being opened, but "
+                + "the customer details inside it are not scrambled.");
+        warning.setForeground(new Color(185, 28, 28));
+        warning.setFont(warning.getFont().deriveFont(Font.PLAIN, 10f));
+        form.add(warning, BorderLayout.SOUTH);
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            String choice = showDialogChoice(this, form, "Database password",
+                    JOptionPane.QUESTION_MESSAGE, "Unlock", "Unlock", "Exit");
+            if (!"Unlock".equals(choice)) {
+                System.exit(0);
+            }
+            char[] password = field.getPassword();
+            field.setText("");
+            try {
+                Database opened = new Database(file, password);
+                // Prove the password works before handing it to the rest of the app.
+                try (java.sql.Connection connection = opened.open()) {
+                    connection.isValid(2);
+                } catch (java.sql.SQLException exception) {
+                    java.util.Arrays.fill(password, '\0');
+                    showWarning("That password did not unlock the database.");
+                    continue;
+                }
+                return opened;
+            } catch (java.io.IOException exception) {
+                java.util.Arrays.fill(password, '\0');
+                showWarning("That password did not unlock the database.");
+            }
+        }
+        JOptionPane.showMessageDialog(this,
+                "The database could not be opened. Please check the password and try again.",
+                "Database locked", JOptionPane.ERROR_MESSAGE);
+        System.exit(0);
+        return null;
+    }
+
+    /**
+     * Creates the first manager account on a fresh database.
+     *
+     * <p>The starting PIN is generated at random and shown once, so there is no
+     * PIN in the source and no shared default that everyone knows. The account is
+     * marked as needing a new PIN before it can be used.
+     */
+    private void runFirstRunSetup() {
+        if (!staffDirectory.isEmpty()) {
+            return;
+        }
+        JTextField name = new JTextField(18);
+        name.setFont(name.getFont().deriveFont(Font.PLAIN, 13f));
+        JTextField username = new JTextField(18);
+        username.setFont(username.getFont().deriveFont(Font.PLAIN, 13f));
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(4, 0, 4, 10);
+        JLabel heading = new JLabel("Create the first staff account");
+        heading.setForeground(TEXT);
+        heading.setFont(heading.getFont().deriveFont(Font.BOLD, 14f));
+        constraints.gridwidth = 2;
+        form.add(heading, constraints);
+        constraints.gridwidth = 1;
+        constraints.gridy = 1;
+        form.add(new JLabel("Name"), constraints);
+        constraints.gridx = 1;
+        form.add(name, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        form.add(new JLabel("Username"), constraints);
+        constraints.gridx = 1;
+        form.add(username, constraints);
+        JLabel hint = new JLabel("Letters, numbers, dot, dash or underscore. This account "
+                + "manages staff and can see customer contact details.");
+        hint.setForeground(MUTED);
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
+        constraints.gridx = 0;
+        constraints.gridy = 3;
+        constraints.gridwidth = 2;
+        form.add(hint, constraints);
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String choice = showDialogChoice(this, form, "First run setup",
+                    JOptionPane.PLAIN_MESSAGE, "Create", "Create", "Continue without an account");
+            if (!"Create".equals(choice)) {
+                showStatus("No staff account created. Bookings still work, but contact "
+                        + "details stay hidden");
+                return;
+            }
+            String refusal = staffDirectory.create(username.getText(), name.getText(),
+                    StaffDirectory.startingPin(), StaffDirectory.Role.MANAGER, true);
+            if (refusal == null) {
+                showStartingPin(username.getText());
+                return;
+            }
+            showWarning(refusal);
+        }
+    }
+
+    /** Shows the generated PIN once, with instructions to change it. */
+    private void showStartingPin(String username) {
+        String pin = staffDirectory.lastCreatedPin(username);
+        String message = "Your staff account is ready.\n\n"
+                + "Username:  " + username + "\n"
+                + "PIN:       " + pin + "\n\n"
+                + "This PIN is shown once. You will be asked to change it the first "
+                + "time you sign in. Write it down now.";
+        String choice = showDialogChoice(this, message, "Your starting PIN",
+                JOptionPane.INFORMATION_MESSAGE, "I have written it down", "I have written it down");
+        staffDirectory.clearLastCreatedPin();
+        showStatus("Staff account created for " + username);
+        if (BACK_LABEL.equals(choice)) {
+            showWarning("Your starting PIN is " + pin + " — write it down, it is not shown again.");
+        }
+    }
+
+    /**
+     * Asks for the staff username and PIN. Returns true when signed in; false means
+     * the user chose to skip, which leaves the management screens closed.
      */
     private boolean promptForSignIn() {
         if (staffSession.isSignedIn()) {
+            if (staffSession.mustChangePin() && !promptToChangePin("You must change your PIN "
+                    + "before you can continue")) {
+                return false;
+            }
             return true;
         }
+        JTextField username = new JTextField(14);
+        username.setFont(username.getFont().deriveFont(Font.PLAIN, 13f));
         JPasswordField pin = new JPasswordField(10);
         pin.setFont(pin.getFont().deriveFont(Font.PLAIN, 13f));
         JPanel form = new JPanel(new BorderLayout(8, 6));
-        form.add(new JLabel(Messages.get("common.pin")), BorderLayout.NORTH);
-        form.add(pin, BorderLayout.CENTER);
-        JLabel hint = new JLabel(Messages.get("common.pinHint"));
-        hint.setForeground(MUTED);
-        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
-        form.add(hint, BorderLayout.SOUTH);
+        form.add(new JLabel("Staff sign-in"), BorderLayout.NORTH);
+        JPanel fields = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(2, 0, 2, 8);
+        fields.add(new JLabel("Username"), constraints);
+        constraints.gridx = 1;
+        constraints.weightx = 1;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        fields.add(username, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 1;
+        fields.add(new JLabel("PIN"), constraints);
+        constraints.gridx = 1;
+        fields.add(pin, constraints);
+        form.add(fields, BorderLayout.CENTER);
 
         while (true) {
             String choice = showDialogChoice(this, form, "Staff sign-in",
@@ -3330,18 +3510,559 @@ public final class StadiumBookingApp extends JFrame {
             if (!"Sign in".equals(choice)) {
                 return false;
             }
-            String refusal = staffSession.signIn(new String(pin.getPassword()));
+            String refusal = staffSession.signIn(username.getText(), new String(pin.getPassword()));
             pin.setText("");
             if (refusal == null) {
-                showStatus("Signed in as staff");
+                showStatus("Signed in as " + staffSession.getDisplayName());
+                updateStaffBadge();
+                if (staffSession.mustChangePin()
+                        && !promptToChangePin("Choose your own PIN before you continue")) {
+                    staffSession.signOut();
+                    updateStaffBadge();
+                    return false;
+                }
                 return true;
             }
-            showWarning(refusal + (staffSession.isLockedOut()
-                    ? " Too many attempts. Close and reopen the application." : ""));
-            if (staffSession.isLockedOut()) {
+            showWarning(refusal);
+        }
+    }
+
+    /**
+     * Asks for a new PIN. Returns false when the user backs out, which for a
+     * forced change means they cannot proceed.
+     *
+     * @param explanation why the change is being demanded
+     */
+    private boolean promptToChangePin(String explanation) {
+        String username = staffSession.getUsername();
+        JPasswordField current = new JPasswordField(10);
+        JPasswordField replacement = new JPasswordField(10);
+        JPasswordField confirm = new JPasswordField(10);
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(3, 0, 3, 10);
+        constraints.gridwidth = 2;
+        JLabel heading = new JLabel(explanation);
+        heading.setForeground(TEXT);
+        heading.setFont(heading.getFont().deriveFont(Font.BOLD, 13f));
+        form.add(heading, constraints);
+        constraints.gridwidth = 1;
+        constraints.gridy = 1;
+        form.add(new JLabel("Current PIN"), constraints);
+        constraints.gridx = 1;
+        form.add(current, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        form.add(new JLabel("New PIN"), constraints);
+        constraints.gridx = 1;
+        form.add(replacement, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 3;
+        form.add(new JLabel("Confirm new PIN"), constraints);
+        constraints.gridx = 1;
+        form.add(confirm, constraints);
+        JLabel rules = new JLabel("6 to 12 digits. Avoid 123456 and other easy guesses.");
+        rules.setForeground(MUTED);
+        rules.setFont(rules.getFont().deriveFont(Font.PLAIN, 10f));
+        constraints.gridx = 0;
+        constraints.gridy = 4;
+        constraints.gridwidth = 2;
+        form.add(rules, constraints);
+
+        while (true) {
+            String choice = showDialogChoice(this, form, "Change PIN",
+                    JOptionPane.PLAIN_MESSAGE, "Change PIN", "Change PIN", BACK_LABEL);
+            if (BACK_LABEL.equals(choice)) {
+                current.setText("");
+                replacement.setText("");
+                confirm.setText("");
                 return false;
             }
+            String entered = new String(replacement.getPassword());
+            if (!entered.equals(new String(confirm.getPassword()))) {
+                showWarning("The two new PINs do not match.");
+                continue;
+            }
+            String refusal = staffDirectory.changePin(username,
+                    new String(current.getPassword()), entered);
+            current.setText("");
+            replacement.setText("");
+            confirm.setText("");
+            if (refusal == null) {
+                showStatus("Your PIN has been changed");
+                return true;
+            }
+            showWarning(refusal);
         }
+    }
+
+    /**
+     * The Staff button: shows who is signed in and offers the actions available.
+     */
+    private void promptForStaffAction() {
+        if (!staffSession.isSignedIn()) {
+            if (!promptForSignIn()) {
+                return;
+            }
+            return;
+        }
+        String name = staffSession.getDisplayName();
+        String role = staffSession.getRole().getLabel();
+        String choice = showDialogChoice(this,
+                "Signed in as " + name + " (" + role + ")\n"
+                        + (staffSession.canViewCustomerDetails()
+                        ? "You can see customer contact details."
+                        : "You cannot see customer contact details."),
+                "Staff", JOptionPane.PLAIN_MESSAGE, "Choose",
+                "Change my PIN", "Manage staff", "Access trail",
+                staffSession.canViewCustomerDetails()
+                        ? "Require a database password" : "Sign out",
+                "Sign out");
+        if ("Require a database password".equals(choice)) {
+            protectDatabase();
+            return;
+        }
+        if ("Change my PIN".equals(choice)) {
+            promptToChangePin("Choose a new PIN");
+        } else if ("Manage staff".equals(choice)) {
+            showStaffManagement();
+        } else if ("Access trail".equals(choice)) {
+            showAccessTrail();
+        } else if ("Sign out".equals(choice)) {
+            signOutStaff();
+        }
+    }
+
+    /** The access trail on its own, for a user who cannot manage accounts. */
+    private void showAccessTrail() {
+        currentScreen = "staff";
+        setHeader("Access trail", "Every sign-in, refused attempt and PIN change.");
+        contentHost.removeAll();
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(20, 0, 22, 0));
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        top.setOpaque(false);
+        JButton back = createOutlineButton("\u2190 Back to stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        top.add(back);
+        page.add(top, BorderLayout.NORTH);
+        page.add(buildAccessLogCard(), BorderLayout.CENTER);
+        contentHost.add(page, BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus("Access trail");
+    }
+
+    /**
+     * Requires a password before the database can be opened.
+     *
+     * <p>The wording here is deliberately precise. It stops the file being opened by
+     * anyone without the password, but this build's database does not encrypt the
+     * contents, so the customer details inside remain readable to somebody with a
+     * hex editor. Saying "encrypted" would be a claim the software cannot support.
+     */
+    private void protectDatabase() {
+        DatabaseProtection protection = new DatabaseProtection(databaseFile());
+        if (protection.isAlreadyProtected()) {
+            showStatus("This database already needs a password");
+            return;
+        }
+        JPasswordField first = new JPasswordField(16);
+        JPasswordField second = new JPasswordField(16);
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(4, 0, 4, 10);
+        form.add(new JLabel("New database password"), constraints);
+        constraints.gridx = 1;
+        form.add(first, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 1;
+        form.add(new JLabel("Confirm password"), constraints);
+        constraints.gridx = 1;
+        form.add(second, constraints);
+        JLabel warning = new JLabel("<html><div style='width:420px'>"
+                + "<b>Read this before you continue.</b><br><br>"
+                + "This will stop the booking file being opened without the password, so a "
+                + "stray copy or a database tool cannot read it.<br><br>"
+                + "It will <b>not</b> encrypt the contents: this build uses a database that "
+                + "leaves the customer details readable in the file to anyone using a hex "
+                + "editor.<br><br>"
+                + "The password cannot be recovered. If you lose it, every booking and staff "
+                + "account is gone. You will be asked for it every time you open the "
+                + "application.</div></html>");
+        warning.setForeground(new Color(146, 64, 14));
+        warning.setFont(warning.getFont().deriveFont(Font.PLAIN, 10f));
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        constraints.gridwidth = 2;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        form.add(warning, constraints);
+
+        while (true) {
+            String choice = showDialogChoice(this, form, "Require a database password",
+                    JOptionPane.PLAIN_MESSAGE, "Protect", "Protect this database", BACK_LABEL);
+            if (BACK_LABEL.equals(choice)) {
+                return;
+            }
+            String entered = new String(first.getPassword());
+            first.setText("");
+            second.setText("");
+            if (!entered.equals(new String(second.getPassword()))) {
+                showWarning("The two passwords do not match.");
+                continue;
+            }
+            if (entered.length() < 8) {
+                showWarning("Use a password of at least 8 characters.");
+                continue;
+            }
+            DatabaseProtection.Outcome outcome = protection.encrypt(entered.toCharArray());
+            java.util.Arrays.fill(entered.toCharArray(), '\0');
+            if (!outcome.isPerformed()) {
+                showWarning(outcome.getProblem());
+                return;
+            }
+            showStatus("The database now needs a password. It will be asked for next time.");
+            showDialogChoice(this,
+                    "The booking file now needs a password.\n\n"
+                            + "You will be asked for it every time you open the application, "
+                            + "because there is nowhere safe for it to be stored.\n\n"
+                            + "It is not stored anywhere, so write it down. If you lose it, "
+                            + "the bookings and staff accounts cannot be recovered.",
+                    "Password required", JOptionPane.INFORMATION_MESSAGE,
+                    "I have written it down", "I have written it down");
+            return;
+        }
+    }
+
+    /** Signs out and clears anything the previous user was allowed to see. */
+    private void signOutStaff() {
+        if (!staffSession.isSignedIn()) {
+            return;
+        }
+        String name = staffSession.getDisplayName();
+        staffSession.signOut();
+        updateStaffBadge();
+        showStatus("Signed out of " + name);
+    }
+
+    /** Reflects who is signed in, or that nobody is. */
+    private void updateStaffBadge() {
+        if (staffBadge == null) {
+            return;
+        }
+        if (staffSession.isSignedIn()) {
+            staffBadge.setText(staffSession.getDisplayName()
+                    + "  •  " + staffSession.getRole().getLabel());
+            staffBadge.setForeground(new Color(190, 242, 100));
+        } else {
+            staffBadge.setText("Not signed in");
+            staffBadge.setForeground(new Color(191, 219, 254));
+        }
+    }
+
+    /**
+     * The staff screen: who has an account, add or disable one, reset a forgotten
+     * PIN, and read the access trail.
+     */
+    private void showStaffManagement() {
+        if (!promptForSignIn()) {
+            return;
+        }
+        if (!staffSession.canViewReports()) {
+            showWarning("Your role cannot manage staff accounts.");
+            return;
+        }
+        currentScreen = "staff";
+        setHeader("Staff", "Accounts, roles and the record of who has looked at customer details.");
+        contentHost.removeAll();
+        contentHost.add(buildStaffContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        showStatus("Staff accounts");
+    }
+
+    private JPanel buildStaffContent() {
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(20, 0, 22, 0));
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        top.setOpaque(false);
+        JButton back = createOutlineButton("← Back to stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        top.add(back);
+        page.add(top, BorderLayout.NORTH);
+
+        JPanel cards = new JPanel(new GridLayout(0, 2, 14, 14));
+        cards.setOpaque(false);
+
+        cards.add(buildStaffAccountsCard());
+        cards.add(buildAccessLogCard());
+        page.add(cards, BorderLayout.CENTER);
+        return page;
+    }
+
+    private JPanel buildStaffAccountsCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 10));
+        JLabel title = new JLabel("Staff accounts");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 15f));
+        card.add(title, BorderLayout.NORTH);
+
+        DefaultTableModel model = new DefaultTableModel(
+                new Object[]{"Name", "Username", "Role", "State", "Last used", ""}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = new JTable(model);
+        table.setBackground(WHITE);
+        table.setForeground(TEXT);
+        table.setRowHeight(30);
+        table.setGridColor(new Color(235, 240, 247));
+        table.getTableHeader().setBackground(SKY);
+        table.getTableHeader().setForeground(BLUE_DARK);
+        int[] widths = {170, 150, 110, 120, 130, 150};
+        for (int column = 0; column < widths.length; column++) {
+            table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+
+        List<StaffDirectory.Account> accounts = staffDirectory.list();
+        for (StaffDirectory.Account account : accounts) {
+            String state = !account.isActive() ? "Deactivated"
+                    : account.isLocked() ? "Locked"
+                    : account.mustChangePin() ? "Must change PIN"
+                    : "Active";
+            model.addRow(new Object[]{account.getDisplayName(), account.getUsername(),
+                    account.getRole().getLabel(), state,
+                    account.getLastUsedAt() == null ? "Never"
+                            : java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm",
+                                    java.util.Locale.ENGLISH)
+                                    .withZone(java.time.ZoneId.systemDefault())
+                                    .format(account.getLastUsedAt()),
+                    account.getUsername()});
+        }
+        table.getColumnModel().getColumn(5).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            protected void setValue(Object value) {
+                setText(value == null ? "" : "Manage");
+                setHorizontalAlignment(CENTER);
+            }
+        });
+        // A cell editor cannot host a button, so the action is wired to clicks on
+        // the last column the same way the booking rows are.
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() != 1) {
+                    return;
+                }
+                int column = table.columnAtPoint(event.getPoint());
+                int row = table.rowAtPoint(event.getPoint());
+                if (column != 5 || row < 0) {
+                    return;
+                }
+                Object username = model.getValueAt(row, 5);
+                if (username != null) {
+                    manageStaffAccount(String.valueOf(username));
+                }
+            }
+        });
+
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        card.add(scroll, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.setOpaque(false);
+        JButton add = createPrimaryButton("Add staff account");
+        add.addActionListener(event -> promptForNewStaff());
+        actions.add(add);
+        card.add(actions, BorderLayout.SOUTH);
+        return card;
+    }
+
+    private JPanel buildAccessLogCard() {
+        JPanel card = createCard();
+        card.setLayout(new BorderLayout(0, 10));
+        JLabel title = new JLabel("Access trail");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 15f));
+        JLabel subtitle = new JLabel("Every sign-in, refused attempt and PIN change.");
+        subtitle.setForeground(MUTED);
+        subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 10f));
+        JPanel heading = new JPanel(new BorderLayout());
+        heading.setOpaque(false);
+        heading.add(title, BorderLayout.NORTH);
+        heading.add(subtitle, BorderLayout.SOUTH);
+        card.add(heading, BorderLayout.NORTH);
+
+        DefaultTableModel model = new DefaultTableModel(
+                new Object[]{"When", "Username", "Action", "Detail"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = new JTable(model);
+        table.setBackground(WHITE);
+        table.setForeground(TEXT);
+        table.setRowHeight(28);
+        table.setGridColor(new Color(235, 240, 247));
+        table.getTableHeader().setBackground(SKY);
+        table.getTableHeader().setForeground(BLUE_DARK);
+        int[] widths = {140, 150, 200, 180};
+        for (int column = 0; column < widths.length; column++) {
+            table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+        java.time.format.DateTimeFormatter stamp = java.time.format.DateTimeFormatter
+                .ofPattern("d MMM HH:mm:ss", java.util.Locale.ENGLISH)
+                .withZone(java.time.ZoneId.systemDefault());
+        for (StaffDirectory.AccessEntry entry : staffDirectory.recentAccess(120)) {
+            model.addRow(new Object[]{stamp.format(entry.getAt()), entry.getUsername(),
+                    entry.getAction().replace('_', ' '),
+                    entry.getDetail() == null ? "" : entry.getDetail()});
+        }
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        card.add(scroll, BorderLayout.CENTER);
+        return card;
+    }
+
+    /** Asks for a new account and creates it with a PIN shown once. */
+    private void promptForNewStaff() {
+        JTextField name = new JTextField(16);
+        JTextField username = new JTextField(16);
+        JComboBox<StaffDirectory.Role> role =
+                new JComboBox<>(StaffDirectory.Role.values());
+        role.setSelectedItem(StaffDirectory.Role.CLERK);
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(4, 0, 4, 10);
+        form.add(new JLabel("Name"), constraints);
+        constraints.gridx = 1;
+        form.add(name, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 1;
+        form.add(new JLabel("Username"), constraints);
+        constraints.gridx = 1;
+        form.add(username, constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        form.add(new JLabel("Role"), constraints);
+        constraints.gridx = 1;
+        form.add(role, constraints);
+
+        String choice = showDialogChoice(this, form, "Add staff account",
+                JOptionPane.PLAIN_MESSAGE, "Create", "Create", BACK_LABEL);
+        if (!"Create".equals(choice)) {
+            return;
+        }
+        String refusal = staffDirectory.create(username.getText(), name.getText(),
+                StaffDirectory.startingPin(), (StaffDirectory.Role) role.getSelectedItem(), true);
+        if (refusal != null) {
+            showWarning(refusal);
+            return;
+        }
+        String created = username.getText().trim().toLowerCase(java.util.Locale.ENGLISH);
+        showDialogChoice(this, "Account created.\n\nUsername:  " + created
+                        + "\nPIN:       " + staffDirectory.lastCreatedPin(created)
+                        + "\n\nThis PIN is shown once. They must change it at first sign-in.",
+                "Starting PIN", JOptionPane.INFORMATION_MESSAGE,
+                "I have written it down", "I have written it down");
+        staffDirectory.clearLastCreatedPin();
+        staffDirectory.log(staffSession.getUsername(), "ACCOUNT_CREATED", created);
+        contentHost.removeAll();
+        contentHost.add(buildStaffContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+    }
+
+    /** Resets a forgotten PIN, deactivates an account, or changes a role. */
+    private void manageStaffAccount(String username) {
+        StaffDirectory.Account account = staffDirectory.list().stream()
+                .filter(candidate -> candidate.getUsername().equals(username))
+                .findFirst()
+                .orElse(null);
+        if (account == null) {
+            showWarning("That account no longer exists.");
+            return;
+        }
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(4, 0, 4, 10);
+        form.add(new JLabel("Name"), constraints);
+        constraints.gridx = 1;
+        form.add(new JLabel(account.getDisplayName()), constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 1;
+        form.add(new JLabel("Username"), constraints);
+        constraints.gridx = 1;
+        form.add(new JLabel(account.getUsername()), constraints);
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        form.add(new JLabel("Role"), constraints);
+        JComboBox<StaffDirectory.Role> role =
+                new JComboBox<>(StaffDirectory.Role.values());
+        role.setSelectedItem(account.getRole());
+        constraints.gridx = 1;
+        form.add(role, constraints);
+
+        String choice = showDialogChoice(this, form, "Manage " + account.getDisplayName(),
+                JOptionPane.PLAIN_MESSAGE, "Save", "Save", BACK_LABEL);
+        if (!"Save".equals(choice)) {
+            return;
+        }
+        String refusal = staffDirectory.changeRole(username,
+                (StaffDirectory.Role) role.getSelectedItem());
+        if (refusal != null) {
+            showWarning(refusal);
+            return;
+        }
+        staffDirectory.log(staffSession.getUsername(), "ROLE_CHANGED",
+                username + " -> " + role.getSelectedItem());
+        if (account.isActive()) {
+            String action = showDialogChoice(this,
+                    "What would you like to do with " + account.getDisplayName() + "?",
+                    "Manage account", JOptionPane.PLAIN_MESSAGE, "Choose",
+                    "Reset their PIN", "Deactivate the account", BACK_LABEL);
+            if ("Reset their PIN".equals(action)) {
+                String pin = StaffDirectory.startingPin();
+                String problem = staffDirectory.resetPin(username, pin);
+                if (problem != null) {
+                    showWarning(problem);
+                } else {
+                    showDialogChoice(this, "New PIN for " + account.getDisplayName()
+                                    + ":\n\n" + pin
+                                    + "\n\nShown once. They must change it at next sign-in.",
+                            "PIN reset", JOptionPane.INFORMATION_MESSAGE,
+                            "I have written it down", "I have written it down");
+                    staffDirectory.log(staffSession.getUsername(), "PIN_RESET", username);
+                }
+            } else if ("Deactivate the account".equals(action)) {
+                if (account.getUsername().equals(staffSession.getUsername())) {
+                    showWarning("You cannot deactivate your own account.");
+                } else {
+                    staffDirectory.setActive(username, false);
+                    showStatus(account.getDisplayName() + " has been deactivated");
+                }
+            }
+        }
+        contentHost.removeAll();
+        contentHost.add(buildStaffContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
     }
 
     private void showWarning(String message) {
@@ -3746,7 +4467,10 @@ public final class StadiumBookingApp extends JFrame {
             } catch (Exception ignored) {
                 // The default Swing look and feel is a suitable fallback.
             }
-            new StadiumBookingApp().setVisible(true);
+            StadiumBookingApp app = new StadiumBookingApp();
+            app.setVisible(true);
+            // Dialogs need a visible parent, so first run setup waits for the window.
+            app.runFirstRunSetup();
         });
     }
 }

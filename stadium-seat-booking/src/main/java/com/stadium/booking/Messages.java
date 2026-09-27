@@ -142,6 +142,7 @@ public final class Messages {
         put(Language.ENGLISH, "common.backToStadiums", "\u2190 Back to stadiums");
         put(Language.ENGLISH, "common.backToSchedule", "\u2190 Back to schedule");
         put(Language.ENGLISH, "nav.occupancy", "Occupancy");
+        put(Language.ENGLISH, "nav.staff", "Staff");
         put(Language.ENGLISH, "occupancy.title", "Occupancy report");
         put(Language.ENGLISH, "occupancy.subtitle",
                 "How full every venue and section is, across all events.");
@@ -273,6 +274,7 @@ public final class Messages {
         put(Language.LUGANDA, "common.backToStadiums", "← Amabirali onoona");
         put(Language.LUGANDA, "common.backToSchedule", "← Subira ku lutundu");
         put(Language.LUGANDA, "nav.occupancy", "Ebikwata");
+        put(Language.LUGANDA, "nav.staff", "Abasa");
         put(Language.LUGANDA, "occupancy.title", "Ebikwata by'ebizitansa");
         put(Language.LUGANDA, "occupancy.subtitle",
                 "Ebizitansa ebikwata buli kizimbe n'ekizimbe, mu bweru bw'ekigyendererwa.");
@@ -314,6 +316,7 @@ public final class Messages {
         put(Language.SWAHILI, "common.backToStadiums", "← Uwanja zote");
         put(Language.SWAHILI, "common.backToSchedule", "← Rudi kwa ratiba");
         put(Language.SWAHILI, "nav.occupancy", "Kujaza");
+        put(Language.SWAHILI, "nav.staff", "Wafanyakazi");
         put(Language.SWAHILI, "occupancy.title", "Ripoti ya kujaza viti");
         put(Language.SWAHILI, "occupancy.subtitle",
                 "Jinsi gani kila uwanja na sehemu ilivyojaa, katika matukio yote.");

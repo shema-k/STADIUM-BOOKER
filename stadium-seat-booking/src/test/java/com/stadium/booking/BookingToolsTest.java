@@ -71,30 +71,8 @@ final class BookingToolsTest {
                     "a seat that is now booked cannot be held");
         });
 
-        test("the staff PIN is required and stored hashed", () -> {
-            StaffSession session = new StaffSession("1234");
-            assertFalse(session.isSignedIn(), "not signed in to begin with");
-            assertTrue(session.signIn("wrong") != null, "a wrong PIN is refused");
-            assertEquals(null, session.signIn("1234"), "the right PIN is accepted");
-            assertTrue(session.isSignedIn(), "signed in after the correct PIN");
-            session.signOut();
-            assertFalse(session.isSignedIn(), "signed out again");
-        });
 
-        test("repeated wrong PINs lock the session", () -> {
-            StaffSession session = new StaffSession("1234");
-            for (int attempt = 0; attempt < 5; attempt++) {
-                session.signIn("nope");
-            }
-            assertTrue(session.isLockedOut(), "five wrong attempts must lock the app");
-        });
 
-        test("customer details are hidden until staff sign in", () -> {
-            assertFalse(StaffSession.canViewCustomerDetails(false),
-                    "details must be hidden when nobody is signed in");
-            assertTrue(StaffSession.canViewCustomerDetails(true),
-                    "details are visible to signed-in staff");
-        });
 
         test("a ticket carries the booking details", () -> {
             BookingService service = serviceWithBooking();

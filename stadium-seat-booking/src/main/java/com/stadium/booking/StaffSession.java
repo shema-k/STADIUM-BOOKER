@@ -1,46 +1,21 @@
 package com.stadium.booking;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Base64;
-
 /**
- * A small staff sign-in gate.
+ * Who is signed in for this run of the application.
  *
- * <p>The application is a desktop tool, so this is deliberately simple: a staff
- * PIN unlocks the management screens. Customer contact details are protected by
- * {@link #canViewCustomerDetails}, which only lets staff see them.
+ * <p>The credentials themselves live in {@link StaffDirectory}; this only holds
+ * the identity of the person currently using the machine. The earlier version
+ * compared a PIN against a hash held in memory, which meant the PIN was in the
+ * source and every user was anonymous.
  */
 public final class StaffSession {
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private StaffDirectory directory;
+    private String username;
+    private String displayName;
+    private StaffDirectory.Role role;
 
-    private final String salt;
-    private final String expectedHash;
-    private String signedInStaff;
-    private int failedAttempts;
-
-    /** Creates a session for a PIN, storing only a salted hash of it. */
-    public StaffSession(String pin) {
-        this.salt = randomSalt();
-        this.expectedHash = hash(pin, salt);
-    }
-
-    private static String randomSalt() {
-        byte[] bytes = new byte[16];
-        RANDOM.nextBytes(bytes);
-        return Base64.getEncoder().encodeToString(bytes);
-    }
-
-    private static String hash(String value, String salt) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = digest.digest((salt + value).getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(bytes);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is required but unavailable", exception);
-        }
+    public StaffSession(StaffDirectory directory) {
+        this.directory = directory;
     }
 
     /**
@@ -48,41 +23,85 @@ public final class StaffSession {
      *
      * @return null on success, otherwise a message explaining the refusal
      */
-    public synchronized String signIn(String pin) {
-        if (pin == null || pin.isBlank()) {
-            return "Enter your staff PIN";
+    public String signIn(String username, String pin) {
+        if (directory == null) {
+            return "The staff list is not available. Please restart the application.";
         }
-        if (!expectedHash.equals(hash(pin, salt))) {
-            failedAttempts++;
-            return "That PIN is not correct";
+        StaffDirectory.Result result = directory.signIn(username, pin);
+        if (!result.isSuccess()) {
+            this.username = null;
+            this.displayName = null;
+            this.role = null;
+            return result.getRefusal();
         }
-        failedAttempts = 0;
-        signedInStaff = "Staff";
+        StaffDirectory.Account account = result.getAccount();
+        this.username = account.getUsername();
+        this.displayName = account.getDisplayName();
+        this.role = account.getRole();
         return null;
     }
 
-    public synchronized void signOut() {
-        signedInStaff = null;
+    public void signOut() {
+        if (username != null && directory != null) {
+            directory.log(username, "SIGN_OUT", "");
+        }
+        username = null;
+        displayName = null;
+        role = null;
     }
 
-    public synchronized boolean isSignedIn() {
-        return signedInStaff != null;
+    public boolean isSignedIn() {
+        return username != null;
     }
 
-    public synchronized int getFailedAttempts() {
-        return failedAttempts;
+    public String getUsername() {
+        return username;
     }
 
-    /** Locks the app after repeated wrong PINs so the data cannot be ground down. */
-    public synchronized boolean isLockedOut() {
-        return failedAttempts >= 5;
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public StaffDirectory.Role getRole() {
+        return role;
+    }
+
+    /** True when the account is still on a PIN it must replace before carrying on. */
+    public boolean mustChangePin() {
+        if (directory == null || username == null) {
+            return false;
+        }
+        return directory.list().stream()
+                .filter(account -> account.getUsername().equals(username))
+                .anyMatch(StaffDirectory.Account::mustChangePin);
     }
 
     /**
-     * Whether the signed-in user may see full customer contact details. Without a
-     * sign-in nothing is shown beyond the seat reference.
+     * Whether the signed-in user may see full customer contact details. A clerk
+     * can see that a booking exists and what was bought, but not how to reach the
+     * customer.
+     */
+    public boolean canViewCustomerDetails() {
+        return isSignedIn() && role == StaffDirectory.Role.MANAGER;
+    }
+
+    /** Whether this user may see the reports at all. */
+    public boolean canViewReports() {
+        return isSignedIn() && role != StaffDirectory.Role.SUPERVISOR;
+    }
+
+    /**
+     * Kept for the call sites that only have a boolean to hand, such as the seat
+     * ledger, which the application gates before a sign-in has happened.
      */
     public static boolean canViewCustomerDetails(boolean signedIn) {
         return signedIn;
+    }
+
+    /** Records that the signed-in user opened something, for the access trail. */
+    public void recordAccess(String action, String detail) {
+        if (username != null && directory != null) {
+            directory.log(username, action, detail);
+        }
     }
 }

@@ -99,6 +99,8 @@ public final class TestRunner {
         LocaleTest.register();
         OccupancyReportTest.register();
         KeyboardSeatSelectionTest.register();
+        StaffAccountTest.register();
+        DatabaseProtectionTest.register();
         System.exit(summary());
     }
 }

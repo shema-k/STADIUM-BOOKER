@@ -38,6 +38,11 @@ public class BookingService {
         this(new BookingStore(new File("stadium-bookings.dat").toPath()));
     }
 
+    /** Uses a caller-supplied database, so staff accounts share the same file. */
+    public BookingService(Database database) {
+        this(new BookingStore(new File("stadium-bookings.dat").toPath(), database));
+    }
+
     public BookingService(BookingStore store) {
         this.store = store;
         activeEvent = StadiumData.getEvents().get(0);

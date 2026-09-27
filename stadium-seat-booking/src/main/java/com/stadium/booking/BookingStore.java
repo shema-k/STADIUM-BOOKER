@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,33 +33,24 @@ import java.util.UUID;
  */
 public final class BookingStore {
     private final Path file;
-    private final String jdbcUrl;
+    private final Database database;
 
     public BookingStore(Path file) {
-        this.file = file;
-        this.jdbcUrl = createJdbcUrl(file);
+        this(file, new Database(file));
     }
 
-    private String createJdbcUrl(Path databaseFile) {
-        if (databaseFile == null) {
-            return null;
-        }
-        String path = databaseFile.toAbsolutePath().toString();
-        if (path.endsWith(".dat")) {
-            path = path.substring(0, path.length() - 4);
-        }
-        return "jdbc:h2:file:" + path.replace('\\', '/') + ";DB_CLOSE_ON_EXIT=FALSE";
+    public BookingStore(Path file, Database database) {
+        this.file = file;
+        this.database = database;
+    }
+
+    /** The underlying database, so staff accounts can share the same file. */
+    public Database getDatabase() {
+        return database;
     }
 
     private Connection openConnection() throws SQLException, IOException {
-        if (jdbcUrl == null) {
-            throw new IOException("No booking database path configured");
-        }
-        Path parent = file.toAbsolutePath().getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        return DriverManager.getConnection(jdbcUrl, "sa", "");
+        return database.open();
     }
 
     private void initializeSchema() throws SQLException, IOException {
@@ -97,7 +87,7 @@ public final class BookingStore {
     }
 
     public List<Booking> read() {
-        if (jdbcUrl == null) {
+        if (file == null) {
             return new ArrayList<>();
         }
         try {
@@ -162,7 +152,7 @@ public final class BookingStore {
      * many instances are open.
      */
     public String allocateReference() throws IOException {
-        if (jdbcUrl == null) {
+        if (file == null) {
             return "ST-" + (1 + (int) (Math.random() * 8999));
         }
         try {
@@ -198,7 +188,7 @@ public final class BookingStore {
      * @throws IOException                if the booking could not be stored
      */
     public void save(Booking booking) throws IOException {
-        if (jdbcUrl == null) {
+        if (file == null) {
             return;
         }
         try {

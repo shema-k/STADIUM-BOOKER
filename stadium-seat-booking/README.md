@@ -62,10 +62,21 @@ A professional desktop stadium directory and seat-booking application built with
   moves the caret there so arrowing on continues from the pointer
 - Accessible names and descriptions on the search fields, customer fields and navigation
 - Interface available in English, Luganda and Swahili, switchable from the header
-- Staff PIN gates the screens that show customer contact details
-- Customer names are shown partially and email and phone are withheld until someone
-  signs in, so contact details are not exposed to whoever opens the application
-- The PIN is stored only as a salted hash, and five wrong attempts lock the session
+- Named staff accounts with three roles: Manager sees customer contact details, Clerk sees
+  bookings and reports but not contact details, Supervisor can only confirm a booking
+- On first run the application creates a manager account with a PIN generated at random and
+  shown once, so there is no PIN in the source and no default everybody knows
+- That PIN must be changed before the account can be used, and the same applies to any
+  account a manager creates
+- PINs are stored only as a salted PBKDF2 hash, so a stolen database cannot be attacked
+  quickly with a word list
+- Weak PINs are refused: too short, repeated digits, or a run like 123456
+- Five wrong attempts locks an account for fifteen minutes
+- Customer names are shown partially and email and phone are withheld until a Manager signs
+  in, so contact details are not exposed to whoever opens the application
+- **Access trail** recording every sign-in, refused attempt, PIN change, PIN reset, account
+  creation and deactivation, with the username and time, so access is attributable rather
+  than anonymous
 - Persistent H2 database for bookings and customer details
 - Bookings section reads complete records from the database
 - Each booking is written to the database in its own transaction, and seats are held in a
@@ -81,10 +92,11 @@ A professional desktop stadium directory and seat-booking application built with
 ./run-tests.sh
 ```
 
-Eighty-four tests covering the venue and event data, pricing and booking rules, database
+One hundred and twenty tests covering the venue and event data, pricing and booking rules, database
 persistence, the section spread, seat holds, the staff PIN, tickets and export, payments,
-the three languages, the occupancy report and keyboard seat selection. The runner needs
-nothing but a JDK, so no build tool or network access is required.
+the three languages, the occupancy report, keyboard seat selection, staff accounts and
+requiring a database password. The runner needs nothing but a JDK, so no build tool or
+network access is required.
 
 Two of them are regression tests for the defect where a confirmed booking could be
 silently destroyed when two people saved at once, and twelve drive the seat-map key
@@ -169,8 +181,9 @@ java -jar target/stadium-select.jar
 8. Review the booked seat numbers in the confirmation message.
 9. Choose how to pay. Cash at the venue is the default.
 10. Save or print the ticket that is issued.
-11. Open **My bookings** to search, review or cancel a reservation. This asks for the staff
-    PIN; the default is `1234`.
+11. Open **My bookings** to search, review or cancel a reservation. This asks you to sign
+    in. On first run the application asks you to create a manager account and shows you a
+    random PIN once, which you must change before you can go further.
 
 The **Occupancy** button in the header shows how full every venue is. The **Booked seats**
 button lists every seat already taken, by venue and event.
@@ -180,6 +193,21 @@ button lists every seat already taken, by venue and event.
 Bookings are stored in the embedded H2 database `stadium-bookings.mv.db` in the project
 working directory. Delete that file to reset the database. Older `stadium-bookings.dat`
 files are migrated automatically when found.
+
+**The database password is not encryption.** The Staff menu can require a password before
+the booking file will open, which does stop a stray copy, a backup or somebody running a
+database tool from reading the bookings. It does **not** encrypt the contents: this build
+uses H2 2.2.224, which was tested directly and does not encrypt page contents on write, so
+customer names, email addresses and phone numbers remain readable in the file to anyone with
+a hex editor. The application says so on screen rather than claiming protection it does not
+provide. A test records this limitation explicitly, so if a future version of H2 does encrypt
+the bytes that test will fail and the wording can be corrected. Real protection of the data
+at rest would need a database that encrypts its pages, or encrypting the customer fields in
+the application.
+
+The password is asked for at every launch, because there is nowhere safe in this build to
+keep it. Writing it into the source, or into a file beside the data, would protect nothing.
+There is no recovery: a lost password means the bookings and staff accounts cannot be read.
 
 **Mobile money is simulated.** The payment step records a mobile money authorisation
 locally and labels it as such; no money moves and no provider credentials ship with this
