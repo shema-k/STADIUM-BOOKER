@@ -33,6 +33,9 @@ A professional desktop stadium directory and seat-booking application built with
 - Booking confirmation with a unique reference
 - Searchable booking history
 - Click any booking row to open complete booking and customer details
+- **Booked seats** section listing every seat taken so far, per stadium and per event
+- Occupancy summary with seats booked, total capacity, vacancy and a per-section breakdown
+- Booked seats view opens pre-set to the event you are booking, via **View booked seats** on the seat screen
 - Back buttons in the main header and opened dialogs for returning to the previous window
 - Hover, pressed and released highlighting on every button so the targeted control is always obvious
 - Status bar and tooltip name the button under the pointer and the button being clicked

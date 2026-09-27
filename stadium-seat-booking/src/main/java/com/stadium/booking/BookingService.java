@@ -100,6 +100,32 @@ public class BookingService {
         return seat == null ? 0.0 : seat.getPrice();
     }
 
+    /**
+     * Price of a seat for any event, without changing the currently selected
+     * event. Used by the booked-seats view so browsing another event's ledger
+     * never disturbs the seat map the user is booking on.
+     */
+    public double getSeatPrice(StadiumEvent event, SeatKey key) {
+        if (event == null || key == null) {
+            return 0.0;
+        }
+        SeatSection section = stadiumFor(event).getSection(key.getSection());
+        if (section == null) {
+            return 0.0;
+        }
+        return roundMoney(section.getBasePrice()
+                * getRowPriceMultiplier(key.getRow(), section.getRows())
+                * event.getPriceFactor());
+    }
+
+    private Stadium stadiumFor(StadiumEvent event) {
+        if (stadiumOverride != null && "legacy-event".equals(event.getId())) {
+            return stadiumOverride;
+        }
+        Stadium stadium = StadiumData.getStadium(event.getStadiumId());
+        return stadium == null ? StadiumData.getStadium("namboole") : stadium;
+    }
+
     public double getRowPriceMultiplier(int row, int rows) {
         if (rows <= 1) {
             return 1.0;
@@ -116,6 +142,24 @@ public class BookingService {
             return 0.95;
         }
         return 0.70;
+    }
+
+    /** Human-readable name of the price tier a row falls into. */
+    public String getRowTierName(int row, int rows) {
+        if (rows <= 1) {
+            return "Front rows";
+        }
+        double position = (Math.max(1, Math.min(row, rows)) - 1.0) / (rows - 1.0);
+        if (position <= 0.20) {
+            return "Front rows";
+        }
+        if (position <= 0.50) {
+            return "Upper rows";
+        }
+        if (position <= 0.80) {
+            return "Middle rows";
+        }
+        return "Back rows";
     }
 
     /**

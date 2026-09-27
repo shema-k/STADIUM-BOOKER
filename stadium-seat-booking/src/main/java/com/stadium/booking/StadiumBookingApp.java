@@ -118,18 +118,27 @@ public final class StadiumBookingApp extends JFrame {
     private final JButton backNavButton = new FeedbackButton("← Back");
     private final JButton stadiumNavButton = new FeedbackButton("Stadiums");
     private final JButton bookingsNavButton = new FeedbackButton("My bookings");
+    private final JButton seatLedgerNavButton = new FeedbackButton("Booked seats");
 
     private Stadium selectedStadium;
     private StadiumEvent selectedEvent;
     private LocalDate selectedScheduleDate;
     private List<LocalDate> scheduleDates = new ArrayList<>();
+    private List<StadiumEvent> ledgerEventOptions = new ArrayList<>();
     private JPanel scheduleListHost;
     private JLabel scheduleResultLabel;
     private JComboBox<String> dateCombo;
     private JButton clearSelectionButton;
     private JButton confirmBookingButton;
     private JButton cancelBookingButton;
+    private JComboBox<String> ledgerStadiumCombo;
+    private JComboBox<String> ledgerEventCombo;
+    private DefaultTableModel ledgerTableModel;
+    private JTable ledgerTable;
+    private JLabel ledgerSummaryLabel;
+    private JLabel ledgerSectionLabel;
     private String currentScreen = "directory";
+    private String ledgerReturnScreen = "directory";
     private final Timer directorySearchTimer = new Timer(140, event -> {
         if ("directory".equals(currentScreen)) {
             refreshDirectoryContent();
@@ -254,12 +263,15 @@ public final class StadiumBookingApp extends JFrame {
         styleHeaderButton(backNavButton);
         styleHeaderButton(stadiumNavButton);
         styleHeaderButton(bookingsNavButton);
+        styleHeaderButton(seatLedgerNavButton);
         backNavButton.addActionListener(event -> goBack());
         stadiumNavButton.addActionListener(event -> showStadiumDirectory());
         bookingsNavButton.addActionListener(event -> showBookings());
+        seatLedgerNavButton.addActionListener(event -> showSeatLedger());
         navigation.add(backNavButton);
         navigation.add(stadiumNavButton);
         navigation.add(bookingsNavButton);
+        navigation.add(seatLedgerNavButton);
 
         header.add(titleBlock, BorderLayout.WEST);
         header.add(navigation, BorderLayout.EAST);
@@ -329,6 +341,12 @@ public final class StadiumBookingApp extends JFrame {
     private void goBack() {
         if ("booking".equals(currentScreen) && selectedStadium != null) {
             openStadium(selectedStadium);
+        } else if ("seats".equals(currentScreen)) {
+            if ("booking".equals(ledgerReturnScreen) && selectedEvent != null) {
+                openEvent(selectedEvent);
+            } else {
+                showStadiumDirectory();
+            }
         } else if ("stadium".equals(currentScreen) || "bookings".equals(currentScreen)) {
             showStadiumDirectory();
         }
@@ -1423,7 +1441,11 @@ public final class StadiumBookingApp extends JFrame {
         actions.setOpaque(false);
         clearSelectionButton = createSecondaryButton("Clear seats");
         clearSelectionButton.addActionListener(event -> clearSelection());
+        JButton viewBooked = createSecondaryButton("View booked seats");
+        viewBooked.setToolTipText("See every seat already taken for this event");
+        viewBooked.addActionListener(event -> showSeatLedger());
         actions.add(clearSelectionButton);
+        actions.add(viewBooked);
         summary.add(middle, BorderLayout.CENTER);
         summary.add(actions, BorderLayout.EAST);
         return summary;
@@ -1878,6 +1900,328 @@ public final class StadiumBookingApp extends JFrame {
         } else {
             showWarning("The booking could not be cancelled.");
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Booked seats ledger
+    // ---------------------------------------------------------------------
+
+    /**
+     * Shows every seat already taken, per stadium and per event, so a customer
+     * can see the occupancy of the venue they are booking on.
+     */
+    private void showSeatLedger() {
+        Stadium target = selectedStadium != null ? selectedStadium : StadiumData.getStadium("namboole");
+        StadiumEvent targetEvent = selectedEvent != null && target != null
+                && target.getId().equals(selectedEvent.getStadiumId())
+                ? selectedEvent : firstEventFor(target);
+        ledgerReturnScreen = "booking".equals(currentScreen) ? "booking" : "directory";
+        currentScreen = "seats";
+        setHeader("Booked seats", "See every seat already taken, by stadium and by event.");
+        contentHost.removeAll();
+        contentHost.add(buildSeatLedgerContent(), BorderLayout.CENTER);
+        contentHost.revalidate();
+        contentHost.repaint();
+        selectLedgerStadium(target);
+        selectLedgerEvent(targetEvent);
+        refreshSeatLedger();
+        showStatus("Booked seats");
+    }
+
+    private StadiumEvent firstEventFor(Stadium stadium) {
+        List<StadiumEvent> events = StadiumData.getEvents(stadium.getId());
+        return events.isEmpty() ? StadiumData.getEvents().get(0) : events.get(0);
+    }
+
+    private JPanel buildSeatLedgerContent() {
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setBackground(PAGE);
+        page.setBorder(new EmptyBorder(20, 0, 22, 0));
+
+        // BorderLayout has a single NORTH slot, so the title row and the summary
+        // card are stacked in one wrapper instead of overlapping each other.
+        JPanel north = new JPanel(new GridBagLayout());
+        north.setOpaque(false);
+        GridBagConstraints northConstraints = new GridBagConstraints();
+        northConstraints.gridx = 0;
+        northConstraints.gridy = 0;
+        northConstraints.weightx = 1;
+        northConstraints.fill = GridBagConstraints.HORIZONTAL;
+        northConstraints.anchor = GridBagConstraints.NORTH;
+
+        JPanel top = new JPanel(new BorderLayout(16, 0));
+        top.setOpaque(false);
+
+        JPanel titleBox = new JPanel(new GridBagLayout());
+        titleBox.setOpaque(false);
+        GridBagConstraints backConstraints = new GridBagConstraints();
+        backConstraints.anchor = GridBagConstraints.WEST;
+        JButton back = createOutlineButton("← Back to stadiums", BLUE);
+        back.addActionListener(event -> showStadiumDirectory());
+        titleBox.add(back, backConstraints);
+
+        GridBagConstraints titleConstraints = new GridBagConstraints();
+        titleConstraints.gridx = 0;
+        titleConstraints.anchor = GridBagConstraints.WEST;
+        titleConstraints.fill = GridBagConstraints.HORIZONTAL;
+        titleConstraints.weightx = 1;
+        JLabel title = new JLabel("Seats booked so far");
+        title.setForeground(TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 21f));
+        titleConstraints.gridy = 1;
+        titleConstraints.insets = new Insets(7, 0, 0, 0);
+        titleBox.add(title, titleConstraints);
+        JLabel subtitle = new JLabel("Occupancy of the venue and event you are booking on.");
+        subtitle.setForeground(MUTED);
+        subtitle.setFont(subtitle.getFont().deriveFont(Font.PLAIN, 11f));
+        titleConstraints.gridy = 2;
+        titleConstraints.insets = new Insets(3, 0, 0, 0);
+        titleBox.add(subtitle, titleConstraints);
+        top.add(titleBox, BorderLayout.WEST);
+
+        JPanel pickers = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        pickers.setOpaque(false);
+        ledgerStadiumCombo = new JComboBox<>();
+        for (Stadium stadium : StadiumData.getStadiums()) {
+            ledgerStadiumCombo.addItem(stadium.getName());
+        }
+        ledgerStadiumCombo.setPreferredSize(new Dimension(280, 38));
+        ledgerStadiumCombo.setBackground(WHITE);
+        styleCombo(ledgerStadiumCombo);
+        ledgerStadiumCombo.addActionListener(event -> {
+            Stadium stadium = StadiumData.getStadium(ledgerStadiumCombo.getSelectedIndex() >= 0
+                    ? StadiumData.getStadiums().get(ledgerStadiumCombo.getSelectedIndex()).getId() : null);
+            if (stadium != null) {
+                loadLedgerEvents(stadium);
+            }
+        });
+        ledgerEventCombo = new JComboBox<>();
+        ledgerEventCombo.setPreferredSize(new Dimension(340, 38));
+        ledgerEventCombo.setBackground(WHITE);
+        styleCombo(ledgerEventCombo);
+        ledgerEventCombo.addActionListener(event -> refreshSeatLedger());
+        pickers.add(labelled("Stadium", ledgerStadiumCombo));
+        pickers.add(labelled("Event", ledgerEventCombo));
+        top.add(pickers, BorderLayout.EAST);
+        north.add(top, northConstraints);
+
+        JPanel summaryCard = createCard();
+        summaryCard.setLayout(new BorderLayout(0, 8));
+        summaryCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 16, 14, 16)));
+        ledgerSummaryLabel = new JLabel("—");
+        ledgerSummaryLabel.setForeground(TEXT);
+        ledgerSummaryLabel.setFont(ledgerSummaryLabel.getFont().deriveFont(Font.BOLD, 14f));
+        ledgerSectionLabel = new JLabel("—");
+        ledgerSectionLabel.setForeground(MUTED);
+        ledgerSectionLabel.setFont(ledgerSectionLabel.getFont().deriveFont(Font.PLAIN, 11f));
+        summaryCard.add(ledgerSummaryLabel, BorderLayout.NORTH);
+        summaryCard.add(ledgerSectionLabel, BorderLayout.CENTER);
+        northConstraints.gridy = 1;
+        northConstraints.insets = new Insets(14, 0, 0, 0);
+        north.add(summaryCard, northConstraints);
+        page.add(north, BorderLayout.NORTH);
+
+        ledgerTableModel = new DefaultTableModel(
+                new Object[]{"Seat", "Section", "Row", "Number", "Price tier", "Price",
+                        "Reference", "Booked by", "Booked on"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        ledgerTable = new JTable(ledgerTableModel);
+        configureLedgerTable();
+        JScrollPane scroll = new JScrollPane(ledgerTable);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+
+        JPanel tableCard = createCard();
+        tableCard.setLayout(new BorderLayout(0, 10));
+        tableCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER), new EmptyBorder(14, 14, 14, 14)));
+        JLabel hint = new JLabel("Every confirmed seat for the selected event, newest first.");
+        hint.setForeground(MUTED);
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
+        tableCard.add(hint, BorderLayout.NORTH);
+        tableCard.add(scroll, BorderLayout.CENTER);
+        page.add(tableCard, BorderLayout.CENTER);
+        return page;
+    }
+
+    private JPanel labelled(String text, JComponent field) {
+        JPanel box = new JPanel(new BorderLayout(0, 3));
+        box.setOpaque(false);
+        JLabel caption = new JLabel(text);
+        caption.setForeground(MUTED);
+        caption.setFont(caption.getFont().deriveFont(Font.BOLD, 10f));
+        box.add(caption, BorderLayout.NORTH);
+        box.add(field, BorderLayout.CENTER);
+        return box;
+    }
+
+    private void styleCombo(JComboBox<String> combo) {
+        combo.setFont(combo.getFont().deriveFont(Font.PLAIN, 11f));
+        combo.setFocusable(false);
+    }
+
+    private void configureLedgerTable() {
+        ledgerTable.setBackground(WHITE);
+        ledgerTable.setForeground(TEXT);
+        ledgerTable.setRowHeight(32);
+        ledgerTable.setShowVerticalLines(false);
+        ledgerTable.setGridColor(new Color(235, 240, 247));
+        ledgerTable.setIntercellSpacing(new Dimension(0, 1));
+        ledgerTable.setSelectionBackground(new Color(219, 234, 254));
+        ledgerTable.setSelectionForeground(TEXT);
+        ledgerTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        ledgerTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        ledgerTable.setFillsViewportHeight(true);
+        JTableHeader header = ledgerTable.getTableHeader();
+        header.setBackground(SKY);
+        header.setForeground(BLUE_DARK);
+        header.setFont(header.getFont().deriveFont(Font.BOLD, 11f));
+        header.setReorderingAllowed(false);
+        header.setPreferredSize(new Dimension(100, 38));
+        int[] widths = {95, 135, 60, 80, 120, 120, 100, 150, 150};
+        for (int column = 0; column < widths.length; column++) {
+            ledgerTable.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+    }
+
+    private void selectLedgerStadium(Stadium stadium) {
+        if (ledgerStadiumCombo == null || stadium == null) {
+            return;
+        }
+        List<Stadium> stadiums = StadiumData.getStadiums();
+        int index = stadiums.indexOf(stadium);
+        if (index >= 0) {
+            ledgerStadiumCombo.setSelectedIndex(index);
+            loadLedgerEvents(stadium);
+        }
+    }
+
+    private void loadLedgerEvents(Stadium stadium) {
+        if (ledgerEventCombo == null) {
+            return;
+        }
+        int previousIndex = ledgerEventCombo.getSelectedIndex();
+        String previousId = previousIndex >= 0 && previousIndex < ledgerEventOptions.size()
+                ? ledgerEventOptions.get(previousIndex).getId() : null;
+        ledgerEventCombo.removeAllItems();
+        ledgerEventOptions = new ArrayList<>();
+        for (StadiumEvent event : StadiumData.getEvents(stadium.getId())) {
+            ledgerEventOptions.add(event);
+            ledgerEventCombo.addItem(ledgerEventLabel(event));
+        }
+        int restore = -1;
+        for (int index = 0; index < ledgerEventOptions.size(); index++) {
+            if (ledgerEventOptions.get(index).getId().equals(previousId)) {
+                restore = index;
+                break;
+            }
+        }
+        if (restore >= 0) {
+            ledgerEventCombo.setSelectedIndex(restore);
+        } else if (ledgerEventCombo.getItemCount() > 0) {
+            ledgerEventCombo.setSelectedIndex(0);
+        }
+    }
+
+    private String ledgerEventLabel(StadiumEvent event) {
+        return event.getHeadline() + "  •  " + event.getWhenLabel();
+    }
+
+    private void selectLedgerEvent(StadiumEvent event) {
+        if (ledgerEventCombo == null || event == null) {
+            return;
+        }
+        for (int index = 0; index < ledgerEventOptions.size(); index++) {
+            if (event.getId().equals(ledgerEventOptions.get(index).getId())) {
+                ledgerEventCombo.setSelectedIndex(index);
+                return;
+            }
+        }
+    }
+
+    /** Rebuilds the ledger table and its summary for the chosen stadium and event. */
+    private void refreshSeatLedger() {
+        if (ledgerTableModel == null || ledgerStadiumCombo == null) {
+            return;
+        }
+        int stadiumIndex = ledgerStadiumCombo.getSelectedIndex();
+        if (stadiumIndex < 0) {
+            return;
+        }
+        Stadium stadium = StadiumData.getStadiums().get(stadiumIndex);
+        int eventIndex = ledgerEventCombo == null ? -1 : ledgerEventCombo.getSelectedIndex();
+        StadiumEvent event = eventIndex >= 0 && eventIndex < ledgerEventOptions.size()
+                ? ledgerEventOptions.get(eventIndex) : null;
+
+        Map<SeatKey, Booking> owner = new LinkedHashMap<>();
+        for (Booking booking : bookingService.getBookingsForEvent(event)) {
+            for (SeatKey key : booking.getSeats()) {
+                owner.putIfAbsent(key, booking);
+            }
+        }
+        List<SeatKey> booked = new ArrayList<>(bookingService.getBookedSeatKeys(event));
+        booked.sort(SeatKey::compareTo);
+
+        int total = bookingService.getTotalSeatCount(event);
+        ledgerTableModel.setRowCount(0);
+        Map<String, Integer> perSection = new LinkedHashMap<>();
+        for (SeatKey key : booked) {
+            Booking booking = owner.get(key);
+            Stadium venue = StadiumData.getStadium(stadium.getId());
+            SeatSection section = venue == null ? null : venue.getSection(key.getSection());
+            perSection.merge(key.getSection(), 1, Integer::sum);
+            ledgerTableModel.addRow(new Object[]{
+                    key.display(),
+                    section == null ? key.getSection() : section.getLabel(),
+                    key.getRow(),
+                    key.getNumber(),
+                    bookingService.getRowTierName(key.getRow(),
+                            section == null ? 1 : section.getRows()),
+                    currency(bookingService.getSeatPrice(event, key)),
+                    booking == null ? "—" : booking.getReference(),
+                    booking == null ? "—" : booking.getCustomerName(),
+                    booking == null ? "—" : formatStamp(booking.getCreatedAt())
+            });
+        }
+
+        double vacancy = bookingService.getVacancyPercentage(event);
+        // Two decimals, so a nearly empty ground never reads as a flat "100.0%".
+        String vacancyText = String.format(Locale.US, "%.2f", vacancy);
+        if (vacancyText.endsWith("00")) {
+            vacancyText = vacancyText.substring(0, vacancyText.length() - 3);
+        }
+        ledgerSummaryLabel.setText(booked.size() + (booked.size() == 1 ? " seat" : " seats")
+                + " booked of " + formatCapacity(total) + "  •  "
+                + vacancyText + "% vacant  •  "
+                + (event == null ? "—" : event.getHeadline()));
+        StringBuilder sections = new StringBuilder("By section:  ");
+        if (stadium != null) {
+            for (SeatSection section : stadium.getSections()) {
+                if (sections.length() > "By section:  ".length()) {
+                    sections.append("     ");
+                }
+                sections.append(section.getId()).append(" ")
+                        .append(section.getLabel()).append("  ")
+                        .append(perSection.getOrDefault(section.getId(), 0))
+                        .append('/').append(formatCapacity(section.getSeatCount()));
+            }
+        }
+        ledgerSectionLabel.setText(sections.toString());
+    }
+
+    private String formatStamp(java.time.Instant instant) {
+        if (instant == null) {
+            return "—";
+        }
+        return java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
+                .withZone(ZoneId.systemDefault())
+                .format(instant);
     }
 
     // ---------------------------------------------------------------------
